@@ -1,0 +1,27 @@
+#+TITLE:    Recursive Regexp Raptor (Book)
+#+AUTHOR:   nasciiboy
+#+EMAIL:    nasciiboy@gmail.com
+#+LANGUAGE: es
+
+Este repositorio contiene el codigo fuente del libro /Raptor-Book/, una guia
+paso a paso de la construccion de un motor de expresiones regulares *Recursive
+Regexp Raptor*.
+
+- [[https://github.com/nasciiboy/RecursiveRegexpRaptor]]
+
+- [[https://github.com/nasciiboy/RecursiveRegexpRaptor-4]]
+
+
+De momento el manual no es mas que un borrador, aun necesita unas cuantos meses
+mas para estar terminado, sugerencias y cambios seran bienvenidos
+([[mailto:nasciiboy@gmail.com]]).
+
+Por cierto, ninguna palabra tiene acentos, no es un error, es una caracteristica
+que facilita la busqueda de palabras clave. Los errores ortograficos seran
+revisados en la version final.
+
+El documento principal esta escrito en un formato de documentacion
+imaginario/experimental basado en /org/, /reStructuredText/ y /texinfo/. Aun no
+hay un programa que lo exporte a otro formato, pero se esta trabajando en ello.
+
+enjoy!
