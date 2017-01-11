@@ -12,8 +12,8 @@ Regexp Raptor*.
 - [[https://github.com/nasciiboy/RecursiveRegexpRaptor-4]]
 
 
-De momento el manual no es mas que un borrador, aun necesita unas cuantos meses
-mas para estar terminado, sugerencias y cambios seran bienvenidos
+De momento el manual no es mas que un borrador, aun necesita varios meses mas
+para estar terminado, sugerencias y cambios seran bienvenidos
 ([[mailto:nasciiboy@gmail.com]]).
 
 Por cierto, ninguna palabra tiene acentos, no es un error, es una caracteristica
@@ -23,5 +23,15 @@ revisados en la version final.
 El documento principal esta escrito en un formato de documentacion
 imaginario/experimental basado en /org/, /reStructuredText/ y /texinfo/. Aun no
 hay un programa que lo exporte a otro formato, pero se esta trabajando en ello.
+
+La version "preeliminar" se encuentra en formato htmt en el fichero
+[[file:raptor-book.html]] y en formato org (modificado) en [[file:raptor-book.org]], las
+modificaciones se realizaran en ambos ficheros. Una vez se tenga la primer
+version se actualizara [[file:raptor-book.morg]]. Si realizas alguna modificacion es
+preferible que sea en el fichero html.
+
+Toda colabaracion sera registrada en el repositorio y en un fichero
+*CONTRIBUTORS.txt*. Las contribuciones destacadas tendran mencion dentro del
+manual!
 
 enjoy!

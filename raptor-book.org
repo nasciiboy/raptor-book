@@ -1,0 +1,1677 @@
+#+TITLE:  Recursive Regexp Raptor
+#+AUTHOR:  nasciiboy
+#+LANGUAGE:  es
+#+DATE:
+#+OPTIONS: *:nil  ^:nil f:nil num:nil html-postamble:nil html-style:nil html-scripts:nil
+#+HTML_HEAD: <link rel="stylesheet" type="text/css" href="worg-data/worg.css" />
+
+#+BEGIN_QUOTE
+  «La conciencia es el patron que se forma cuando apredemos a mirar hacia atras
+  de nosotros mismos, incluso antes de nuestra propia existencia.»
+#+END_QUOTE
+
+* Introduccion
+
+  Al igual que muchos de mis predecesores, quede fascinado por la utilidad de
+  las expresiones regulares.
+
+  Probablemente no hayas encontrado informacion sobre como construir un motor de
+  expresiones regulares (ni sobre su funcionamiento) o la disponible se enfoque
+  solamente en fundamentos matematicos, para los cuales el autor no muestra un
+  metodo para transladarlos al mundo real (@e(codigo)).
+
+  Has acudido al codigo de alguna implementacion en busca de conocimiento
+  practico?  Y... encotraste codigo rebuscado y mistico repartido en infinidad
+  de ficheros, llenos de macros, guiones bajos y variables cripticas.
+
+  Pues bien, este libro va de construir un motor de expresiones regulares paso a
+  paso, con mucho codigo y poca teoria. Nada de cerraduras de Kleene, NFA o
+  DFA. Principalmente por el autor no tiene ni idea de matematicas y su
+  conocimiento se limita a un par de libros de programacion en lenguaje
+  C/C++... ¯\_(ツ)_/¯
+
+  El autor de este libro reconoce que este precedente no genera mucha
+  expectativa, pero confia plenamente en la simplesa de su implementacion,
+  fundamentada en cientos de horas frente a un par de monitores.
+
+  Para afrontar la construccion de este particular motor de expreciones
+  regulares escrito en lenguaje C, se asume que tienes conocimientos intermedios
+  de programacion, particularmente con algun lenguaje basado en C y que dispones
+  de las siguientes herramientas:
+
+  - Un buen compilador de C (C99) (@e(GNU GCC) o @e(LLVM)).
+
+  - @e(GNU Emacs) o algun simple "editor" de texto.
+
+  - Un terminal con un interprete de comandos (como bash) o un entrorno que te
+    permita enviar ordenes al compilador, ejecutar programas y ver su salida.
+
+  - Buena musica! Programar sin musica no vale la pena!
+
+** Sobre el libro... y otras cosas
+
+   El libro se divide en cuatro secciones:
+
+   - [[*RegExp]] expone una breve explicacion de lo que son las expresiones
+     regulares y su sintaxis.
+
+   - [[*Regexp3 (ASCII)]] muestra como imprementar un motor de expresiones regulares
+     basado en el sitema de codificacion de caracteres @A(ASCII).
+
+   - [[*Regexp3%20(UTF-8)][*Regexp3 (UTF-8)]] toma el codigo e ideas expuestas en [[*Regexp3 (ASCII)]]
+     agregando algunas utilidades basicas para manejar la codificacion de
+     caracteres @A(UTF-8)
+
+   - Finalmente la seccion [[*Regexp4]] se centra en mejorar el desempeño del motor
+     implementando una "tabla de instrucciones", se modifican elementos de la
+     sintaxis y se agregan nuevas caracteristicas.
+
+*** otras cosas
+
+    Este libro asi como todo el codigo que en el aparece esta cubierto por
+    licencias con derechos de izquierda (Copileft).
+
+    Para el libro se utiliza la licencia GNU FDL version 1.3.
+
+    Para el codigo se utiliza la licencia GNU GPL version 3.
+
+    El libro deberia estar acompañado por copias de ambas licencias, en caso
+    contrario puede optener una copia desde
+    [[https://www.gnu.org/licenses/fdl-1.3.html]] y
+    [[https://www.gnu.org/licenses/gpl.html]]
+
+    En esencia para el codigo fuente tienes:
+
+    - la libertad para utilizar el software para cualquier proposito,
+    - la libertad para modificar el software para que se adapte a tus necesidades,
+    - la libertad para compartir el software con tus amigos y vecinos, y
+    - la libertad para compartir los cambios que tu hagas.
+
+
+    Estas libertades se aplican tambien al libro. Puedes copiar y redistribuir
+    el trabajo, con o sin modificaciones y de forma comercial o no comercial.
+
+    Todo aquel que obtenga una copia de este material tiene derecho a conservar
+    las mimas condicines de uso, es decir, tanto el original como las versiones
+    modificadas tendran la misma licencia.
+
+    El codigo de este libro se encuentra alojado en
+    [[https://github.com/nasciiboy/raptor-book]], bajo el sistema de control de
+    versiones @$(git).
+
+    Puedes clonar el repositiro con el comando:
+
+    #+BEGIN_SRC sh
+      git clone https://github.com/nasciiboy/raptor-book.git
+    #+END_SRC
+
+    Cualquir duda o contrubucion sera bien resivida en el correo electronico
+    [[mailto:nasciiboy@gmail.com]].
+
+    El codigo fuente del manual esta escrito con un lenguaje de marcas ligeras
+    aun en desorrollo llamado morg. Tambien se ofrecen versiones en html (libre
+    de javascrip) y en formato ebook (de momento generadas mediante org-mode).
+
+*** Como leer el libro
+
+    @e(Si, en este libro no hay ningun acento) (y probablemente tenga una
+    terrible ortografia y/o redaccion). El autor considera que la mejor forma de
+    leer cualquier documento es en formato de texto plano (detro de @e(Emacs))
+    pues permite entre otras cosas:
+
+    - Preservar el material atraves de los tiempos
+
+    - Facil difucion. No cuenta con ningun ridiculo sistema de "proteccion"
+
+    - Adaptarlo a diversos formatos con el minimo esfuerzo
+
+    - Realizar busquedas eficientes. Punto donde los acentos son un
+      inconveniente
+
+    - La interaccion directa con la interfaz humano-maquina mas eficiente, el
+      teclado
+
+
+    Respecto al codigo, en cada seccion se agregan funcionalidades de forma
+    incremental y cada seccion depende de la anterior. Por lo general se
+    presenta todo el codigo necesario al inicio del tema, para luego examinar
+    los puntos relevantes.
+
+    Dentro del codigo no se incluye ningun comentario que explique la finalidad
+    de ninguna declaracion.
+
+    Supuestamente cuando se escribe codigo con una estructura razonable, nombres
+    descriptivos y que puede leerse de forma descendente, no es necesaria
+    ninguna aclaracion. Obviamente, se presupone que el codigo aqui expuesto
+    cumple estos requisitos...
+
+    Actualmente la libreria sigue en desarrollo en dos repositorios
+
+    [[https://github.com/nasciiboy/RecursiveRegexpRaptor]] alias Regexp3: El punto
+    de partida de la libreria. Es interesante ver los cambios entre cada version
+    en particular el codigo inicial.
+
+    [[https://github.com/nasciiboy/RecursiveRegexpRaptor-4]] alias Regexp4: La ruta
+    actual de desarrollo. En su base contiene a Regexp3, con la unica diferencia
+    de ser mas eficiente respecto al consumo de CPU.
+
+    Bien podrias acudir directamente al codigo de ambas versiones y tomar este
+    libro como una version super explicita de su funcionamiento.
+
+* RegExp
+
+  Una Expresion regular es una secuencia de caracteres que define un patron de
+  busqueda. Son mejor conocidas por las contracciones @e(RegExp), @e(RegEx) y
+  @e(RE) del original @q(Regular Expressions) en ingles. La aplicacion principal
+  de las @e(RegExp) es localizar patrones para filtrar informacion, validar
+  datos y manipular texto.
+
+  Se originaron en 1956, cuando el matematico @e(Stephen Kleene) describio los
+  @e(lenguajes regulares) utilizando su propia notacion matematica llamada
+  @e(conjuntos regulares).
+
+  En 1968, @e(Ken Thompson) pionero de Unix publico el articulo «Regular
+  Expression Search Algorith» que contenia la descripcion tecnica de un
+  compilador de expresiones regulares junto con codigo en Algol-60, mas tarde,
+  implementaria por vez primera en un programa informatico el uso de expresiones
+  regulares con la notacion de Kleene, especificamente en el editor de texto
+  @$(QED). El objetivo era que el usuario pudiese hacer comparacion de patrones
+  avanzados en archivos de texto. En 1969 esta capacidad fue incorporada al
+  editor @$(ed) (creacion de Thompson), en forma del comando @c(g/re/p) que
+  proviene de «globally/regular expresion/print» y significa «@e(g)lobally
+  search a @e(r)egular @e(e)xpression and @e(p)rint» (has una busqueda global
+  para las lineas que coincidan con la expresion regular e imprimelas).
+
+  El comando @c(g/re/p) dio como resultado el programa independiente @$(grep)
+  (tambien obra de Thompson), lanzado en la cuarta edicion de Unix en 1973. Sin
+  embargo, grep no tenia una implementacion completa de expresiones regulares,
+  no fue hasta el año 1979, en la septima edicion de Unix que el programa
+  @$(egrep) (extended grep) (creacion de @e(Alfred Aho)) logro traducir cualquier expresion
+  regular a su correspondiente algoritmo DFA.
+
+  Alrededor de la misma epoca en la que Thompson desarrollo @$(QED), un grupo de
+  investigadores, puso en marcha una herramienta basada en Expresiones
+  Regulares, en esta ocacion su funcion fue el analisis lexico en el diseño de
+  compiladores.
+
+  En la decada de los 70's muchas variaciones de las regexp implementadas en
+  Unix se incorporaron a programas como @$(vi), @$(lex), @$(sed), @$(awk),
+  @$(expr), @$(emacs), etc.
+
+  En la decada de los 80's, las expresiones regulares mas complejas aparecieron
+  en el lerguaje de programacio @e(Perl), derivadas de la biblioteca @e(regexp)
+  de @e(Henry Spencer) (1986).
+
+  Inevitablemente la Jihad RegExp se extendio a la mayoria de lenguajes de
+  programacion, shell's, bases de datos, servidores web, editores de texto,
+  navegadores de ficheros y un variado numero de programas en forma de pequeñas
+  utilidades.
+
+** Sintaxis RegExp
+
+   Las RegExp estan formadas por una serie de constructores que pueden
+   convinarse libremente entre si. Como no podria ser de otra forma los
+   constructores no son mas que una serie de caracteres (numeros, letras o
+   signos de puntuacion) a los que se atribuye un comportaminto especifico.
+
+   La sintaxis de los constructores puede variar de un motor/programa/lenguaje a
+   otro, sin embargo por lo general se siguen las siguientes convenciones:
+
+*** Caracter
+
+    Se consideran caracteres todos los numeros, letras o signos de puntuacion
+    cuyo unico significado es la coincidencia con el propio caracter.
+
+    Dentro del motor su evaluacion es secuencial. Es decir, un patron compuesto
+    unicamente por caracteres solo puede coincidir si cada uno de sus elementos
+    esta precente en el texto de busqueda, de forma secuencial. En terminos
+    simples esto significa que cualquier palabra esta conformada por sus
+    constructores @e(caracter)
+
+    #+BEGIN_SRC c
+      "palabra" ==  'p', 'a', 'l', 'a', 'b', 'r', 'a'
+    #+END_SRC
+
+    De forma explicita el patron de busqueda @c(palabra) dice al motor lo
+    siguiente: Busca el constructor de tipo caracter @c(p), si lo encuentras
+    avanza una posicion dentro del texto de busqueda y comparalo con el
+    constructor de tipo caracater @c(a), si lo encuentras avanza una posicion
+    dentro del texto de busqueda y compararlo con el constructor de tipo
+    caracter @c(l), ..., si llegas hasta el ultimo constructor tipo caracter
+    (ultima @c(a)) el patron a sido localizado, de otra forma no hay
+    coincidencia.
+
+*** Conjunto
+
+    El constructor @e(Conjunto) permite agrupar una serie de constructores
+    caracter para compararlos con una posicion especifica del texto de busqueda.
+
+    Los constructores se delimitan dentro de los signos "especiales" '[' y ']'.
+
+    La expresion:
+
+    #+BEGIN_SRC c
+      "199[56789]"
+    #+END_SRC
+
+    le indica lo siguiente al motor: Busca el constructor de tipo caracter
+    @c(1), si lo encuentras avanza una posicion dentro del texto de busqueda y
+    comparalo con el constructor que de tipo caracter @c(9), si lo encuentras
+    avanza una posicion dentro del texto de busqueda y compararlo con el
+    constructor de tipo caracter @c(9), si lo encuentras avanza una posicion
+    dentro del texto de busqueda y comparalo con alguno de estos constructores
+    de tipo caracter @c(5), @c(6), @c(7), @c(8) o @c(9), Si el caracter del
+    texto  coincide con alguno  de estos caracteres se ha encontrado el patron,
+    de otro modo la busqueda ha fallado.
+
+    Es decir el patron @c(199[56789]) coincide con las siguientes cadenas de
+    caracteres: @c("1995"), @c("1996"), @c("1997"), @c("1998") o @c("1999")
+
+*** Rangos
+
+    Un conjunto agrupa una serie de constructores caracter, pues bien, cuando
+    los miembros dichos del conjunto forman una secuencia alfabetica entre @c(a)
+    y @c(z), entre @c(A) y @c(Z)) o entre @c(0) y @c(9), es posible abreviar
+    dicha secuencia, uniendo el elemento inicial con el elemento final de la
+    secuencia mediante el signo '-', por ejemplo la exprecion
+
+    #+BEGIN_SRC c
+      "199[56789]"
+    #+END_SRC
+
+    es equivalente a la exprecion:
+
+    #+BEGIN_SRC c
+      "199[5-9]"
+    #+END_SRC
+
+    la exprecion
+
+    #+BEGIN_SRC c
+      "Unidad-[ABCDEFGHIJK]"
+    #+END_SRC
+
+    es equivalente a
+
+    #+BEGIN_SRC c
+      "Unidad-[A-K]"
+    #+END_SRC
+
+    el signo @c(-) no tiene efecto fuera del constructor agrupacion, por lo que
+    se interpreta como un simple caracter @c(-)
+
+*** Conjunto inverso
+
+    La utlima facilidad que proporciona el constructor conjunto consiste en
+    coincidir solo si ninguno de sus elementos esta precente en el texto de
+    busqueda, es decir @e(invierte) el resultado de la busqueda. La forma de
+    indicar al motor este comportamiento es colocar el signo @c(^) como primer
+    elemento del constructor conjunto. Por ejemplo la expresion
+
+    #+BEGIN_SRC c
+      "<[^>]>"
+    #+END_SRC
+
+    Es util para localizar @e(etiquetas) de un solo caracter por ejemplo
+    @c(<A>), @c(<B>), @c(<C>), @c(<D>), @c(<E>), etc.
+
+*** Punto
+
+    El constructor punto representado por el signo @c(.) se utiliza para
+    realizar una coincidencia con cualquier caracter presente en el texto de
+    busqueda.
+
+    Por lo general se suele excluir el caracter @c(\n) (salto de linea). la
+    razon de este comportamiento es solamente por practicidad aunque
+    conceptualmente no existe un motivo para ello.
+
+    El constructor punto no tiene efecto dentro de un conjunto, en su lugar se
+    evalua como @e(el caracter) @c(.). No tiene sentido que un conjunto coincida
+    con cualquier caracter.
+
+*** Cuantificación
+
+    Por defecto, el motor asume un constructor ha de estar presente almenos una
+    vez, no obstante es posible especificar cuantas veces consecutivas puede
+    aparecer un constructor. Para esto se hace uso de los @e(cuantificadores)
+    que mas que un "constructor", @e(son una caracteristica de un constructor).
+
+    Los cuantificadores se colocan justo al final del cosntructor al que han de
+    aplicarse. El constructor alternacion, que veremos mas adelante no es
+    compatible con los cuantificadores.
+
+    - @c(?) ::
+
+      El constructor puede aparecer cero o una vez. Por ejemplo, @c(ob?scuro) se
+      corresponde con @c(oscuro) y @c(obscuro).
+
+    - @c(+) ::
+
+      El elemento debe aparecer al menos una vez. Por ejemplo, @c(ho+la) describe
+      el patron infinito @c(hola), @c(hoola), @c(hooola), @c(hoooola), ...,
+
+    - @c(*) ::
+
+      El elemento puede aparecer cero, una, o más veces. Por ejemplo, @c(0*42) se
+      corresponde con @c(42), @c(042), @c(0042), @c(00042), ...,
+
+    - @c({n}) ::
+
+      El elemento debe aparecer exactamente @m(n) veces. Por ejemplo
+      @c([0-9]{3}) se corresponden con cualquier cifra de tres digitos como
+      @c(007), @c(747), @c(777), ...,
+
+    - @c({a,b}) ::
+
+      El elemento debe aparecer un minimo de @m(a) veces y un maximo de @m(b)
+      veces.
+
+*** Alternación
+
+    Como ya vimos la agrupacion permite la busqueda de mas de un constructor
+    caracter para una posicion especifica. El constructor alternacion se
+    comporta de forma idetica, solo que en lugar de manejar constructores
+    caracter maneja expreciones delimitadas una de otra por el signo @c(|):
+
+    #+BEGIN_SRC c
+      exp1|exp2|exp3|...
+    #+END_SRC
+
+    en este caso el termino @e(exprecion) se refiere a una RegExp en si.
+
+    La busqueda de expresiones se realiza de forma secuencial, de izquierda a
+    derecha hasta localizar alguna expresion o hasta agotar las
+    alternativas. Por ejemplo
+
+    #+BEGIN_SRC c
+      "Raptor|T Rex|Triceratops"
+    #+END_SRC
+
+    genera los patrones de busqueda @c(Raptor), @c(T Rex) y @c(Triceratops)
+
+    Como ya se menciono en el apartado anterior, los cuantificadores no se
+    aplican a este constructor. Para cuantificar las arternativas deben
+    encontrarse dentro de una agrupacion.
+
+*** Agrupación
+
+    Una agrupacion permite definir el ámbito y la precedencia de los demás
+    constructores. Las agrupaciones se delimitan dentro de las signos @c[(] y
+    @c[)]. Por ejemplo:
+
+    #+BEGIN_SRC c
+      "(p|m)adre"
+    #+END_SRC
+
+    es equivalente a
+
+    #+BEGIN_SRC c
+      "padre|madre"
+    #+END_SRC
+
+    y
+
+    #+BEGIN_SRC c
+      "(des)?amor"
+    #+END_SRC
+
+    se corresponde con @c(amor) y con @c(desamor).
+
+*** Metacaracteres
+
+    Para el motor los signos @c(.), @c[(], @c[)], @c(|), @c([), @c(]), @c(+),
+    @c(?), @c({), @c(}), ..., etc. tiene un significado especial, ya sea como
+    delimitadores, como cuantificadores o como constructores. Como hacer para
+    buscar estos signos como simples caracteres?
+
+    Podriamos colocarlos detro de un conjuto de caracteres, asi:
+
+    #+BEGIN_SRC c
+      "[()|+]"
+    #+END_SRC
+
+    pero existen casos complejos como:
+
+    #+BEGIN_SRC c
+      "[]]"
+    #+END_SRC
+
+    cual signo @c(]) marca el limite del conjunto?
+
+    Para evitar casos ambiguos se hace uso del constructor @e(metacaracter) que
+    despoja de su significado @e(especial) a los signos antes mencionados.
+
+    El constructor metacaracter suele estar formado por dos signos, el signo que
+    indica que se trata de un metacaracter y el signo al que se aplica. Por lo
+    general el signo utilizado como indicador es @c(\).
+
+    Ahora podemos solucionar el ejemplo anterior, pasaria a ser:
+
+    #+BEGIN_SRC c
+      "[\]]"
+    #+END_SRC
+
+    que ocurre si se aplica @c(\) a un caracter sin significado especial, por
+    ejemplo, a @c(d)?
+
+    #+BEGIN_SRC c
+      "\d"
+    #+END_SRC
+
+    existen dos posibilidades:
+
+    1. El motor interpreta @c(d) como un caracter.
+
+    2. El motor otorga un significado especial al caracter, como podria ser la
+       busqueda de un patron especifico, en cuyo caso, el significado puede
+       variar de una implementacion a otra.
+
+
+    Cuando el caso es el segundo, la mayoria de los motores cosidera que el
+    metacaracer @c(\d) (digit) equivalente al conjunto @c([0-9]).
+
+    Aqui una lista de los significados comunes de algunos metacaracters
+
+    - @c(\d) ==> @c([0-9])
+    - @c(\D) ==> @c([^0-9])
+    - @c(\a) ==> @c([a-bA-B])
+    - @c(\A) ==> @c([^a-bA-B])
+    - @c(\w) ==> @c([a-bA-B0-9])
+    - @c(\W) ==> @c([^a-bA-B0-9])
+    - @c(\s) ==> @c([ \t-\r])
+    - @c(\S) ==> @c([^ \t-\r])
+
+
+    Finalmente, podemos utilizar metacaracteres para representar signos no
+    impribibles como pueden ser nueva linea, tabulador, retroceso, campana,
+    etc.
+
+*** Modiicadores
+
+    Aunque no se definen como tal, los modificadores son una forma de alterar el
+    comportamiento del motor al momento de efectuar la busqueda de un patron.
+
+    Pongamos como ejemplo los dos modificadores mas comunes:
+
+    - @c(^) :: colocar este signo @e(al inicio) de la expresion le indica al
+               motor: la busqueda solo sera valida si el patron se encuentra al
+               inicio del texto.
+
+    - @c($) :: colocar este signo @e(al final) de la expresion le indica al
+               motor: la busqueda solo sera valida si el patron se encuentra al
+               final del texto.
+
+
+    ambos modificadores pueden combinarse dentro de la expresion, indicando: la
+    busqueda sera valida si el patron inicia el la posicion inicial del texto y
+    finaliza en la ultima posicion.
+
+    Los modificadores al igual que los metacaracteres dependen unicamente de lo
+    que especifique cada implementacion.
+
+* Regexp3 (ASCII)
+** Herramientas
+
+   Asi que, te has decidido a leer este libro y tienes la suficiente experiencia
+   como para escribir, compilar y ejecutar un programa en C.
+
+   No voy a decirte el sistema bajo el que deberias programar, ni si es mejor
+   utilizar un editor, un IDE o Emacs, tampoco cual compilador, shell o mapeo de
+   teclado sea el mas apropiado. Seguramente has elegido tus herramientas tras
+   una profunda refleccion luego evaluar todas las posibilidades y no por que
+   alguien te impuso su uso...
+
+   No obstante y solamente por motivos informativos, te presento la configuracion
+   que utilizo y el porque:
+
+   - Como sistema operativo @e(GNU) con @e(Linux). No fue hasta que llegue a la
+     distribucion @e(Debian), que conoci lo que era la informatica, lo util de
+     los repositorios de software y la existencia del movimiento @e(software
+     libre).
+
+   - Como entorno de escritorio grafico @e(Gnome Shell). Es simple, sobrio,
+     bonito y eficaz.
+
+   - Donde hay un prompt hay felicidad! No hay mejor herramienta para interactuar
+     con el sistema, que una terminal.
+
+     En particular me gusta @e(Konsole), parte del proyecto KDE. Tiene pestañas
+     multiples, pueden desabilitarse el menu y la barra de despalazamiento, para
+     ocupar la pantalla completa sin distracciones, ademas la configuracion del
+     teclado es muy flexible.
+
+   - Quien hace aparecer el prompt es @e(fish), un interpre de comandos con
+     colorines y un sistema de autocompletado fantanstico.
+
+   - Para compilar programas C, @e(GCC) el compilador de GNU. Ademas suelo pedir
+     una segunda opinion al compilador @e(clang) (LLVM).
+
+   - Como sistema de control de versiones @e(git). Conocer los comandos basicos
+     es mas que suficiente.
+
+   - Los sonidos del mundo son muy aburridos. @e(moc) (Music On Console) se
+     encarga del amenizar el ambiente con buena musica.
+
+   - La pieza sobre la que gira mi flujo de trabajo se llama @e(GNU Emacs), un
+     interprete de Emacs Lisp, que tambien suele utilizarse como editor de texto
+     (risas). En serio no compliques tu vida con molestos IDEs llenos de botones,
+     menus y mierdas graficas. Todo es mejor en texto plano!
+
+   - Finalmente utilizo el mapeo de teclado @e(programmer dvorak) con una ligera
+     modificacion (los dos control, mayus, @ y \) y una configuracion de al menos
+     dos monitores.
+
+** Mr. Raptor
+
+   #+BEGIN_QUOTE
+     Disponer del codigo fuente de un programa no garantiza que seamos capaces
+     de compreder su funcionamiento. Si para entender un proyecto es necesario
+     asistir a su construccion y tener presente todos su detalles ocultos,
+     probablemente cuando los desarrolles pasen a otro proyecto nadie este
+     dispuesto (o sea capaz) de continuar con el desarrollo.
+
+     Por ello no es suficiente disponer del codigo, ademas, debe ser simple y
+     directo, para que otros sean capaces de comprender su funcionamiento.
+
+     El primer paso para lograr este objetivo es dar nombres claros y concisos
+   #+END_QUOTE
+
+   De donde surge el nombre del motor?
+
+   La primer version funcional simplemente se llamaba @f(regexp). Pese a ser un
+   nombre conciso, ya no estaba disponible, lo cual me obligo a ser un poco mas
+   creativo.
+
+   El nombre debia destacar las cualidades del proyecto. Si el motor sobresale
+   en algun aspecto es por no tener un manejo explicito de memoria, en su lugar,
+   optiene memoria llamando a funciones y llamando a funciones de forma
+   recursiva... ya esta, @e(RE²) (Recursive Regexp), un momento, nooo, google ya
+   utiliza este nombre para su motor RegExp @e(RE2), bueno, otra caracteristica
+   tendra... el codigo es compacto, si, es tan compacto que ha de ser
+   ridiculamente eficiente, lo cual lo hace ridiculamente veloz, veloz, veloz,
+   rapido, Raptor, @e(Recursive Regexp Raptor), je, que creativo, no puede ser
+   RE³ o lo asociaran con google, su alias sera @e(regexp3) (es mas comodo
+   escribir @c(#include "regexp3") que @c(#include "RecursiveRegexpRaptor.h"),
+   ademas, dejo clara su funcion y tiene una longitud similar al de otras
+   librerias de C como @c(stdlib), @c(stdio) o @c(ctype)).
+
+   Una ves desvelado el misterio demos paso a la construccion.
+
+** El truco
+
+   He tratado de mantener el codigo lo mas simple y compacto posible, centrando
+   la atencion en los puntos importantes. En la practica esto repercute en tres
+   puntos a cosiderar:
+
+   - No se utiliza la sintaxis estadar, tampoco la que maneja Perl. En su lugar
+     se opta por la que es mas facil de programar e interpretar.
+
+   - El motor asume que la expresion que resive tiene una sintaxis correcta.
+
+     En la practica es igual de complejo constuir una programa encargado solo de
+     verificar y mostrar los errores de sintaxis, a uno que simplemente busca la
+     exprecion. Sin demasiado esfuerzo, se opta por la segunda opcion, ademas,
+     se esta contruyendo un motor RegExp @e(en C), si los datos de entrada son
+     inapropiados, lo minimo que merece el programador es un ciclo de ejecucion
+     infinito.
+
+   - El manejo de memoria no se realiza de forma explicita, en su lugar se acude
+     a la recursividad.
+
+
+   En cualquer punto podras ser capas de reforsar el codigo si asi lo
+   deseas. Sin embargo te recomiendo esperar hasta que el programa realice todas
+   las funciones que necesites.
+
+** La Sintaxis
+
+   La version final de @c(regexp3) (ASCII) soporta los siguientes constructores:
+
+   - Alternacion @c(|)
+
+   - Agrupacion @c[()]. Para "capturar" la coincidencia del patron dentro de la
+     la cadena de texto, se utiliza @c(<>)
+
+   - Los cuantificadores son
+
+     - @c(?) cero o una vez
+
+     - @c(+) una o mas veces
+
+     - @c(*) cero o mas veces
+
+     - @c({n}) @m(n) veces
+
+     - @c({a,b}) un rango de veces
+
+   - Los conjuntos @c([]).
+
+     - Para negar un conjunto el primer elemento debe ser @c(^)
+
+   - Lon rangos se especifican con el signo @c(-) y son validos fuera de un
+     conjunto, el decir @c(-) es un signo especial para el motor. Si queremos
+     despojarlo de su significado tenemos que incluirlo en un metacaracter
+     @c(:-).
+
+   - Punto @c(.). Un punto dentro de un conjunto, no pierde su
+     significado. Para buscar el caracter @c(.) debemos incluirlo en un
+     metacaracter @c(:.).
+
+   - El metacaracter se conforma de dos caracteres el signo @c(:) y el
+     metacaracter.
+
+   - Los modificadores de comportamiento se aplican de forma global o local y se
+     especifican con el signo @c(#) seguido por los modificadores.
+
+     Para modificar el comportamiento @e(global) de la exprecion, el modificador
+     se coloca al inicio de la exprecion antes de cualquier constructor.
+
+     Para modificar el comportamiento de un constructor en especifico @c(#) se
+     coloca al final del constructor. Si se aplica un cuantificador al
+     constructor, el modificador debe especificarse despues de este.
+
+** El algoritmo
+*** Como interpretar la regexp
+
+    Una expresion regular es una serie de instrucciones detalladas no ambiguas,
+    que describen un patron de busqueda a un interprete (motor) de expresiones
+    regulares.
+
+    El patron de la regexp sigue una [[*Sintaxis%20RegExp][sintaxis]] donde la unidad fundamental se
+    llama constructor. Estas unidades cual si fuesen bloques de construccion
+    pueden conbinarse y agruparse para formar un patron de busqueda mas complejo
+    segun las reglas y posicion de cada constructor.
+
+    En principio, un motor regexp solo necesita dos datos de entrada: la regexp
+    y una cadena de texto sobre la cual efectuar la busqueda del patron.
+
+    Una vez el motor tiene estos dos datos, debe @e(optener) el primer
+    constructor de la regexp y comparar todas sus combinaciones posibles en la
+    cadena, tomando como posicion de referencia el primer caracter de la cadena.
+
+    Si todas las combinaciones fallan, el motor mueve la posicion de referencia
+    al segundo caracter de la cadena y de nuevo prueba todas las combinaciones
+    del primer constructor. Si el primer constructor coincide con la cadena el
+    motor avanza atraves de regexp y cadena, optiene el siguiente constructor y
+    lo compara con la nueva posicion de la cadena. Si el constructor no
+    coincide, el motor vuelve al ultimo recorrido completo e intenta (si existe)
+    una combinacion diferente. De lo contrario, intentara nuevamente con el
+    primer constructor en la siguiente posicion de la cadena.
+
+    Si se llega al final de la cadena sin antes agotar los constructores
+    signica que el patron de busqueda no esta precente.
+
+    Si se agotan los contructores el motor informara que existe una
+    coincidencia.
+
+    Es importante resaltar que el avance tanto en la exprecion como en la cadena
+    se realiza de izquierda a derecha. Esto proboca que el motor regrese la
+    coincidencia en la cadena mas a la izquierda de la combinacion de
+    constructores en la regexp mas a la izquierda.
+
+    Resumiento los puntos claves de los parrafos anteriores:
+
+    1. Se analiza el texto y la regexp de izquierda a derecha.
+
+    2. Se optiene el primer constructor de la regexp y se prueban todas sus
+       combinaciones en la posicion actual de la cadena.
+
+    3. Si el patron del constructor coincide con la cadena se avanza atraves de
+       regexp y cadena.
+
+    4. Si el patron del constructor no se encuenta en la cadena, el motor vuelve
+       al ultimo recorrido completo e intenta otra ruta.
+
+    5. Si no hay otra ruta el motor avanza una posicion en la cadena e intenta
+       con la regexp apartir del primer constructor
+
+    6. Si se agotan los constructores tenemos una coincidencia.
+
+    7. Si se agota la cadena no tenemos ninguna coincidencia.
+
+
+    El @e(punto dos), da a entender que un constructor tiene varias
+    combinaciones posibles. A saber los constructores son @e(agrupacion),
+    @e(alternacion), @e(conjunto), @e(rango), @e(punto), @e(metacaracter) y
+    @e(caracter). Analicemos cada constructor.
+
+    Una @e(agrupacion) contiene un numero indeterminado de combinaciones
+    posibles, ya que puede @"(agrupar) a cualquier otro constructor, incluso
+    otras agrupaciones.
+
+    Una @e(alternacion) permite recorrer multiples @e(rutas) de ejecucion hasta
+    que alguna coincida, cada una de estas "rutas" puede estar formada por
+    expreciones de complejidad arbitraria.
+
+    Los @e(conjuntos) solo pueden contener @e(rangos), @e(metacaracteres) y
+    @c(caracteres).
+
+    @e(caracteres), @e(metacaracteres) y @e(punto) no pueden contener a ningun
+    otro constructor.
+
+    El @e(caracter) solo tiene una combinacion posible, el mismo. El @e(punto)
+    puede coincidir con cualquier caracter. Un @e(conjunto) puede coincidir con
+    un caracter que este dentro de su conjunto de elementos y la coincidencia de
+    un @e(metacaracter) depende de la implementacion de cada motor.
+
+    La conclusion es: si el constructor es distinto de @e(caracter) tendremos
+    que probar todas sus posibles combinaciones.
+
+    El @e(tercer punto) dice que el motor avanza atravez de regexp y cadena, es
+    decir, si el constructor coincide con @m(n) caracteres de la cadena, el
+    siguiente constructor se compara @m(n) caracteres despues de la comparacion
+    anterior.
+
+    Imaginemos que tenemos un ciclo de busqueda donde los constructores y la
+    cadena se corresponden correctamente:
+
+    #+BEGIN_EXAMPLE
+      cadena      0123456789:;<=>?@ABCDEFGHIJKLMNOPQ...
+                  ▲       ▲▲     ▲▲         ▲▲     ▲
+                  │Α     Ω││Α   Ω││Α       Ω││Α   Ω│
+      constructor [ cons1 ][cons2][  cons3  ][cons4]...
+    #+END_EXAMPLE
+
+    @c(Α) (Alfa) señala el punto inicial de la cadena donde se compara el
+    constructor y @c(Ω) (Omega) señala los @m(n) caracteres que abarca la
+    (posible) coincidencia.
+
+    Puede observarse, que cada constructor es independiente uno de otro, es el
+    motor quien se encarga de coordinar la posicion de la cadena donde se
+    compara un constructor en especifico. El recorrido atravez de ambos, como
+    indica el @e(punto uno) siempre se realiza de izquierda a derecha.
+
+    El @e(punto cuatro) dice que si la comparacion falla, el motor vuelve al
+    ultimo recorrido completo e intenta @e(otra ruta). Esto da a entender que el
+    motor lleva un registro de la posicion en la cadena y el numero de
+    constructor que se utiliza para cada comparacion e incluso que el motor debe
+    conocer la existencia de distintas rutas de ejecucion. Veamos detenidamente
+    este punto.
+
+    Si tenemos una serie de constructores de tipo caracter y la coincidencia del
+    ultimo constructor falla (@c(x) != @c(5))
+
+    #+BEGIN_EXAMPLE
+      cadena      0123456789:;<=>?@ABCDEFGHIJKLMNOPQ...
+                  ▲▲▲▲▲△
+                  ││││││
+      constructor 01234x6789
+    #+END_EXAMPLE
+
+    cual seria la ultima ruta de ejecucion completa? Correcto, niguna. En esta
+    exprecion (@c(01234x6789)) regresar al constructor anterior @c(4) (la ultima
+    ruta completa) no tiene sentido, pues para completar la ruta el constructor
+    tipo caracter @c(x) ha de coincidir, es decir, no existe otra ruta de
+    ejecucion posible.
+
+    Veamos otro caso:
+
+    #+BEGIN_EXAMPLE
+      cadena      0123x56789:;<=>?@ABCDEFGHIJKLMNOPQ...
+                  ▲▲▲▲△
+                  │││││
+      constructor 0││3│
+                   ││ │
+                   ││[456789]
+                  (12)
+    #+END_EXAMPLE
+
+    la regexp es @c{0(12)[456789]}, ¿cual seria la ultima ruta de ejecucion
+    completa? Correcto, niguna. Al igual que la exprecion anterior solo existe
+    @e(una ruta) de ejecucion... porque? un conjunto contiene multiples
+    elementos posibles de coincidencia, no multiples rutas de ejecucion. Si
+    ninguno de sus elementos coincide no hay un punto al cual regresar, esto
+    mismo aplica a las agrupaciones.
+
+    Entoces? el unico constructor que permite multiples rutas de ejecucion es la
+    @e(alternacion).
+
+    Cuando el motor "ve" una exprecion del tipo @c(1234x|12345), se dice a si
+    mismo: uh, tengo un par de rutas @c(1234x) y @c(12345), debo almacerar la
+    posicion inicial e intertar con la primer ruta, si esta falla restaurar la
+    posicion inicial e intentar con la segunda ruta..
+
+    la primer ruta de ejecucion sera
+
+    #+BEGIN_EXAMPLE
+      cadena      0123456789:;<=>?@ABCDEFGHIJKLMNOPQ...
+                  ▲▲▲▲▲△
+                  ││││││
+      constructor 01234x
+    #+END_EXAMPLE
+
+    el patron falla al comparar el quinto constructor caracter (dentro del
+    constructor alternacion). Luego el motor prueba con la segunda ruta de
+    ejecucion
+
+    #+BEGIN_EXAMPLE
+      cadena      0123456789:;<=>?@ABCDEFGHIJKLMNOPQ...
+                  ▲▲▲▲▲▲
+                  ││││││
+      constructor 012345
+    #+END_EXAMPLE
+
+    en esta ocacion, todos los constructores miembro del constructor alternacion
+    coinciden, luego entonces, al no existir mas constructores en la exprecion
+    @c(1234x|12345) el motor informa la coincidecia.
+
+    Esto implica que el motor optiene los constructores de la exprecion
+    @c(1234x|12345) de la siguiente forma
+
+    #+BEGIN_EXAMPLE
+      regexp          "1234x|12345"
+
+      constructor:     1234x|12345       tipo: alternacion
+      almacenar posicion de inicio
+
+      generar          RUTA1 y comparar con la posicion de inicio
+      constructor:     1                 tipo: caracter
+      constructor:      2                tipo: caracter
+      constructor:       3               tipo: caracter
+      constructor:        4              tipo: caracter
+      constructor:         x             tipo: caracter
+
+      si la primer ruta falla
+      generar                RUTA2 y comparar con la posicion de inicio
+      constructor:           1           tipo: caracter
+      constructor:            2          tipo: caracter
+      constructor:             3         tipo: caracter
+      constructor:              4        tipo: caracter
+      constructor:               5       tipo: caracter
+    #+END_EXAMPLE
+
+    (º-°)ง un momento, dices que la exprecion
+
+    #+BEGIN_SRC c
+      "abc"
+    #+END_SRC
+
+    para el motor es (la C es por "constructror")
+
+    #+BEGIN_EXAMPLE
+      [C-caracter][C-caracter][C-caracter]
+    #+END_EXAMPLE
+
+    que
+
+    #+BEGIN_SRC c
+      "a[bcdefghi]c"
+    #+END_SRC
+
+    para el motor es
+
+    #+BEGIN_EXAMPLE
+      [C-caracter][C-conjunto][C-caracter]
+    #+END_EXAMPLE
+
+    que
+
+    #+BEGIN_SRC c
+      "(a[bcdefghi])c"
+    #+END_SRC
+
+    es
+
+    #+BEGIN_EXAMPLE
+      [C-agrupacion][C-caracter]
+    #+END_EXAMPLE
+
+    y que
+
+    #+BEGIN_SRC c
+      "(a[12345]|c[12345])|e"
+    #+END_SRC
+
+    es
+
+    #+BEGIN_EXAMPLE
+      [C-alternacion]
+    #+END_EXAMPLE
+
+    Eso es correcto! El motor debe identificar los constructores @e(de primer
+    nivel) (por llamarlos de algun modo) y luego, si es el caso optener
+    constructores apartir de estos.
+
+    Ademas, se debe tener en cuenta que siempre existe almenos una ruta de
+    ejecucion, @e(la regexp en si). Solo cuando existe una alternacion en el
+    primer nivel habra mas de una ruta de ejecucion ... y, el motor solo ve las
+    alternaciones cuando se encuentran en el primer nivel, en decir, no estan
+    dentro de una agrupacion. Por tanto la primer accion del motor es comprobar
+    si existe mas de una ruta de ejecucion o lo que es lo mismo, averiguar si el
+    primer constructor es una alternacion.
+
+    (º-°)ง espera, como se puede coordinar el avance entre los constructores de
+    primer nivel y sus componentes, si los tienen? Sencillo, los constructores
+    miembro desconocen el nivel al que pertenecen, el motor realiza una nueva
+    busqueda con los constructores miembros a partir de un punto concreto en la
+    cadena como si fuesen una exprecion autonoma, si hay una coincidencia el
+    motor informa el resultado y su longitud a quien solicite la
+    consulta. Veremos este mecanismo en la codificacion del motor.
+
+    (º-°)ง cuando se realiza este proceso? cuando el constructor es de tipo
+    agrupacion o alternacion, puesto que en ambos casos estos constructores
+    pueden contener expresiones formadas por cualquier tipo y cantidad de
+    constructores.
+
+*** Pseudocodigo
+
+    #+BEGIN_SRC
+      El motor recibe la regexp y la cadena de caracteres
+
+      Un bucle recorre la cadena de izquierda a derecha, un caracter a la vez.
+
+      | Realizamos una busqueda del patron en la posicion actual de la cadena
+      |
+      | Un bucle recorre la regexp de izquierda a derecha opteniendo los
+      | constructores
+      |
+      | | Si el constructor es de tipo alternacion almacenamos la posicion de
+      | | inicio en la cadena y recorremos las rutas
+      | |
+      | | Si el constructor es de tipo agrupacion recorremos sus constructores
+      | | miembro
+      | |
+      | | El resto de constructores pueden buscarse directamente en la cadena
+      | |
+      | | | Si hay coincidencia, movemos la cadena las n posiciones que abarca
+      | | | el patron
+      | |
+      | | | Si no hay coincidencia la ruta termina con fallo.
+      | |
+      | | | Si no hay mas rutas la busqueda terimina con fallo.
+      |
+      | Si llegamos al final del bucle hay una coincidencia
+    #+END_SRC
+
+*** Diagrama
+
+    #+BEGIN_EXAMPLE
+          ┌──────┐
+          │inicio│
+          └──────┘
+              │◀───────────────────────────────────┐
+              ▼                                    │
+      ┌────────────────┐                           │
+      │bucle por cadena│                           │
+      └────────────────┘                           │
+              │                                    │
+              ▼                                    │
+       ┌─────────────┐  no   ┌─────────────┐       │
+      <│fin de cadena│>────▶<│buscar regexp│>──────┘
+       └─────────────┘       └─────────────┘  no coincide
+              │ si                  │ coincide
+              ▼                     ▼
+      ┌────────────────┐    ┌────────────────┐
+      │informar: no    │    │informar:       │
+      │hay coincidencia│    │hay coincidencia│
+      └────────────────┘    └────────────────┘
+              │                     │
+              │◀────────────────────┘
+              ▼
+            ┌───┐
+            │fin│
+            └───┘
+    #+END_EXAMPLE
+
+    En esta version de @c(buscar regexp) todos los constructores se optienen por
+    una sola funcion:
+
+    #+BEGIN_EXAMPLE
+                                                                  ┌───────────────────────────────┐
+      ┏━━━━━━━━━━━━━┓                                             ▼                               │
+      ┃buscar regexp┃                                   ┌───────────────────┐                     │
+      ┗━━━━━━━━━━━━━┛                                   │Optener constructor│                     │
+                                                        └───────────────────┘                     │
+                                                                  │                               │
+                                                                  ▼                               │
+                                                          ┌───────────────┐  no  ┌─────────────┐  │
+                                                         <│hay constructor│>────▶│terminar: la │  │
+                                                          └───────────────┘      │ruta coincide│  │
+                                                                  │ si           └─────────────┘  │
+                                    ┌──────────┬────────┬─────────┼───────────┬──────────┐        │
+                                    ▼          ▼        ▼         ▼           ▼          ▼        │
+                              ┌───────────┐┌────────┐┌─────┐┌────────────┐┌────────┐┌──────────┐  │
+                              │alternacion││conjunto││punto││metacaracter││caracter││agrupacion│  │
+                              └───────────┘└────────┘└─────┘└────────────┘└────────┘└──────────┘  │
+                                    │          │        │         │           │          │        │
+                                    ▼          └────────┴─────────┼───────────┘          └────────┤
+                             ┌──────────────────┐                 │                               │
+                  ┌──────────│ guardar posicion │                 ▼               no              │
+                  │          └──────────────────┘       ┌──────────────────┐   coincide           │
+                  │          ┌──────────────────┐      <│buscar constructor│>─────────┐           │
+                  ▼◀─────────│restaurar posicion│◀──┐   └──────────────────┘          │           │
+           ┌───────────────┐ └──────────────────┘   │             │ coincide          │           │
+           │recorrer rutas │                        │             ▼                   ▼           │
+           └───────────────┘                        │    ┌──────────────────┐ ┌────────────────┐  │
+                  │                                 │    │avanzar por cadena│ │terminar, ruta  │  │
+                  ▼                                 │    └──────────────────┘ │sin coincidencia│  │
+              ┌────────┐   si     ┌─────────────┐   │             │           └────────────────┘  │
+             <│hay ruta│>───────▶<│buscar regexp│>──┘             └───────────────────────────────┘
+              └────────┘          └─────────────┘ no coincide
+                  │ no           coincide │
+                  ▼                       ▼
+      ┌─────────────────────────┐ ┌─────────────┐
+      │terminar sin coincidencia│ │terminar, la │
+      └─────────────────────────┘ │ruta coincide│
+                                  └─────────────┘
+    #+END_EXAMPLE
+
+    bonito diseño (funciona!), aun asi buscar el constructor @e(alternacion) en
+    cada bucle atravez de la regexp es un desperdicio de recursos, @e(el
+    constructor alternacion solo es visible (al motor) si esta fuera de
+    cualquier otro constructor) (en la practica, eso siginifica estar fuera del
+    constructor agrupacion).
+
+    #+BEGIN_EXAMPLE
+                    ┌──────────────────┐
+                    │ guardar posicion │                                 ┏━━━━━━━━━━━━━┓
+                    └──────────────────┘                                 ┃buscar regexp┃
+               ┌────────────▶│                                           ┗━━━━━━━━━━━━━┛
+               │             ▼
+               │      ┌───────────────┐
+               │      │recorrer rutas │
+               │      └───────────────┘
+               │             │                         ┌─────────────────────────────────┐
+               │             ▼                         ▼                                 │
+               │         ┌────────┐   si     ┌───────────────────┐                       │
+               │        <│hay ruta│>────────▶│obtener constructor│                       │
+               │         └────────┘          └───────────────────┘                       │
+               │             │ no                      │                                 │
+               │             ▼                         ▼                                 │
+               │ ┌─────────────────────────┐   ┌───────────────┐  no  ┌─────────────┐    │
+               │ │terminar sin coincidencia│  <│hay constructor│>────▶│terminar: la │    │
+               │ └─────────────────────────┘   └───────────────┘      │ruta coincide│    │
+               │                                       │ si           └─────────────┘    │
+               │                    ┌────────┬─────────┼───────────┬──────────┐          │
+               │                    ▼        ▼         ▼           ▼          ▼          │
+      ┌──────────────────┐      ┌────────┐┌─────┐┌────────────┐┌────────┐┌──────────┐    │
+      │restaurar posicion│      │conjunto││punto││metacaracter││caracter││agrupacion│    │
+      └──────────────────┘      └────────┘└─────┘└────────────┘└────────┘└──────────┘    │
+               ▲                    │        │         │           │          │          │
+               │                    └────────┴─────────┼───────────┘          │          │
+               │                                       ▼                      ▼          │
+       ┌────────────────┐    no coincide     ┌──────────────────┐      ┌─────────────┐   │
+       │terminar: ruta  │◀────────┬─────────<│buscar constructor│>  ┌─<│buscar regexp│>  │
+       │sin coincidencia│         │          └──────────────────┘   │  └─────────────┘   │
+       └────────────────┘         │                    │ coincide   │         │          │
+                                  └──────────────────┈┈│┈┈──────────┘         │ coincide │
+                                                       ▼                      │          │
+                                              ┌──────────────────┐            └──────────┤
+                                              │avanzar por cadena│                       │
+                                              └──────────────────┘                       │
+                                                       │                                 │
+                                                       └─────────────────────────────────┘
+    #+END_EXAMPLE
+
+** codigo
+*** interfaz
+
+    En el lenguaje de programacion C, las funciones dividen un programa extenso
+    en pequeños fragmentos que realizan tareas concretas y dan la posibilidad de
+    construir sobre lo que otros ya han hecho (... eso suena a @e(sotfware
+    libre)).
+
+    En esencia y segun los gurus del mundo de la programacion, una buena funcion
+    debe cumplir almenos estos principios
+
+    - debe hacer una sola cosa
+    - tener un nombre que describa su funcion
+    - no necesitar mas de tres tres argumentos, de preferencia ninguno.
+
+
+    en realidad la lista es mas extensa y detallada (lo suficiente como para
+    escribir un libro), almenos interare seguir estas normas en la medida de lo
+    posible, que tampoco es que existan muchos ejemplos de buen gusto en lo que
+    a programar en lenguaje C se refiere..
+
+    Para cumplir el primer punto debemos preguntar ¿Que es lo que hace un motor
+    regexp?
+
+    - Buscar la coincidencia de un patron en una cadena.
+
+    - Mostrar el fragmento de la cadena que corresponda al patron.
+
+    - Localizar todas las coincidencias de un patron.
+
+    - Capturar todas las coincidencias.
+
+    - Mostrar las coincidencias
+
+    - Permitir modificar las coincidencias
+
+
+    Compactar todas estas tareas en una sola funcion, no es prudente (eso no
+    evita que algunas implementaciones lo intenten). @e(Recursive Regexp Raptor)
+    hereda una interfaz que ha sobrevidido sin cambio alguno durante miles de
+    millones de años
+
+    #+BEGIN_SRC c
+      unsigned int regexp3( char *txt, char *re );
+    #+END_SRC
+
+    Lo que intenta transmitir el prototipo de funcion es:
+
+    Hola soy un motor de expreciones regulares, me llamo @e(Recursive Regexp
+    Raptor) pero tu puedes llamarme @c(regexp3), para invocarme tienes que darme
+    una regexp en forma de cadena de caracteres (argumento @c(re)) y una cadena
+    de caracteres donde buscar el patron (argumento @c(txt)). Con mis
+    habilidades de raptor descubrire cuantas veces se encuetra el patron en la
+    cadena y te informare de esto regresando el conteo de coincidencias, si no
+    hay coincidencias regreso 0 (cero).
+
+    Podriamos decir que cumple las tres reglas
+
+    - Hace una cosa, contabilizar las coincidencias del patron.
+
+    - tiene un nombre descriptivo... bueno el nombre no es muy explicito que
+      digamos, pero almenos tiene la palabra regexp.
+
+    - no necesita mas de 3 parametros (@c(2 < 3)).
+
+
+    El resto de la interfaz, esta relacionado con el manejo y la manipulacion de
+    capturas. Se veran a su debido tiempo segun avance el desarrollo del motor,
+    por el momento nos centraremos en el metodo para optener los constructores
+    de la exprecion.
+
+*** constructores
+
+    Es una lastima no poder conectarnos directamente a la maquina y transmitirle
+    los algotirmos mentales de cada problema que hemos resuelto. Peor aun,
+    tenemos serias deficiencias para transmitir dichas soluciones de forma
+    detallada, coherente y no ambigua, que es precisamente en lo que consiste la
+    programacion.
+
+    Mientras esperamos la llegada de la [[https://es.wikipedia.org/wiki/Singularidad_tecnol%C3%B3gica][singularidad]] y con la poca habilidad
+    expresiva que poseeo hare lo posible para plasmar un procedimiento logico
+    de codificacion... alla vamos...
+
+    La regexp tiene una sintaxis bien definida que nos ayuda a identificar el
+    tipo, patron y alcance de cada constructor. Una vez se ha identificado el
+    constructor es necesario almacenar sus caracteristicas de forma conveniente.
+
+    Para nuestra fortuna C nos permite manejar un grupo de variables
+    relacionadas (las caracteristicas) como una unidad, en lugar de como
+    entidades dispersas. Este tipo de dato compuesto por datos de tipos
+    diversos, recive el nombre de estructura (@c(struct))
+
+    De momento, la estructura que almacena la informacion de nuestra regexp solo
+    necita dos datos:
+
+    1. El contenido (instruciones) del constructor.
+
+       El motor recive la regexp en formato cadena de caracteres. A medida que
+       analiza la cadena debe marcar el @e(alcance) de cada constructor, es
+       decir, el punto de inicio (@c(char *ptr)) y su longutid (@c(int len)).
+
+    2. Un identificador del tipo de constructor que estamos manejando (@c(enum
+       TYPE type))
+
+    #+BEGIN_SRC c
+      enum TYPE { PATH, GROUP, HOOK, BACKREF, SET, RANGEAB, META, POINT, SIMPLE };
+
+      struct RE {
+        char     *ptr;
+        int       len;
+        enum TYPE type;
+      };
+    #+END_SRC
+
+    Cada elemento de la enumeracion @c(TYPE) se corresponde con un constructor:
+
+    - @c(PATH) para el constructor @e(alternacion).
+
+      El motor puede utilizara este identificador a modo de comodin para una
+      expresion sin analizar, ya que cualquier expresion puede considerarse como
+      una alternacion de una sola ruta...
+
+    - @c(GROUP) para el constructor agrupacion
+
+    - @c(HOOK). En la mayoria de implementaciones regexp, cuando una agrupacion
+      coincide con un fragmento de la cadena, el motor debe almacenar una
+      referenecia a dicho fragmento. En nuestra implementacion la captura de una
+      agrupacion debe indicarse explicitamente.
+
+      segun el traductor @c(HOOK) significa gancho y se ofrece como una opcion
+      para traducir @"(captura) o @"(pesca).
+
+    - @c(BACKREF). @e(Backreference) (retroreferencia o referencia anterior)
+
+      Una vez se ha realizado la captura de una seccion de la cadena, con este
+      constructor podemos solicitar la coincidencia de dicha seccion, en una
+      posicicion mas adelante en la cadena
+
+    - @c(SET) para conjunto de caracteres
+
+    - @c(RANGEAB) un rango de caracteres.
+
+      En realidad este no es un constructor, pero ya que un rango de caracteres
+      posee una estructura especifica, hacemos uso de un idintificador a modo de
+      facilidad.
+
+      Una ventaja de esta aproximacion es permitir el uso de rangos fuera de un
+      conjunto.
+
+    - @c(META) para metacaracter
+
+    - @c(POINT) para punto
+
+    - @c(SIMPLE) para caracter.
+
+      Dada la estructura del tipo @c(RE) y la naturaleza de este constructor, es
+      posible tratar una secuencia de constructores caracter como una simple
+      cadena de caracteres.
+
+
+    Si analizamos el [[*Diagrama][diagrama de flujo]], es evidente que la complejidad del
+    problema se concentra en optener los constructores mas que en el recorrido
+    atraves de la cadena. Vamos a concentrarnos en ese aspecto, lo primero sera
+    poder optener el constructor alternacion, los caracteres y las agrupaciones,
+    en ese orden.
+
+    Luego podremos realizar busquedas sencillas en una posicicion especifica de
+    la cadena, mas tarde la busqueda se extendera por toda la longitud de la
+    cadena.
+
+    Las palabras @"(recorrido), @"(ruta), @"(caminar) o @"(segmento) son
+    habituales cuando se explica el funcionamiento de un motor regexp. En
+    nuestra implementacion Los nombres de variables y funciones adoptaran esta
+    tematica simpre que sea apropiado.
+
+    Con esto en mente y simplificando (mucho) el diagrama
+
+    #+BEGIN_EXAMPLE
+                   ┌───────┐
+                   │regexp3│
+                   └───┬───┘
+                       │◀──────────────────────────────┐
+                       ▼                               │
+                    ┌──────┐                           │
+                    │walker│                           │
+                    └──┬───┘                           │
+                       │                               │
+                       ▼                               │
+                   ┌────────┐                          │
+                   │trekking│                          │
+                   └───┬────┘                          │
+        ┌──────┬───────┼─────┬──────┬───────┬──────┐   │
+        ▼      ▼       ▼     ▼      ▼       ▼      ▼   │
+      ┌───┐┌───────┐┌────┐┌─────┐┌──────┐┌─────┐┌────┐ │
+      │SET││RANGEAB││META││POINT││SIMPLE││GROUP││HOOK│ │
+      └───┘└───────┘└────┘└─────┘└──────┘└─────┘└────┘ │
+        └──────┴───────┼─────┴──────┘       └──────┴───┘
+                       ▼
+                    ┌─────┐
+                    │match│
+                    └─────┘
+    #+END_EXAMPLE
+
+    La funcion @c(regexp3) es la funcion disponible al usuario. Se encargara de
+    recivir, inicializar los datos, y realizar consultas de coindencia en cada
+    posicion de la cadena.
+
+    La funcion @c(walker) (caminante) recive la regexp, optiene y recorre cada
+    ruta de ejecucion. Si alguna ruta coincide retorna verdadero, en caso
+    contrario retorna falso
+
+    La funcion @c(trekking) (senderista) optiene los constructores de una ruta,
+    segun el tipo del constructor se realiza una consulta a @c(match) para
+    buscar un patron directamente en la cadena, o a @c(walker) para generar
+    nuevas subrutas de ejecucion y luego optener sus contructores.  @c(trekking)
+    devuelve verdadero si todos los constructores coinciden, de lo contrario
+    devuelve falso.
+
+*** path
+
+    #+BEGIN_SRC c
+      #include <stdio.h>
+      #include <string.h>
+
+      #define TRUE  1
+      #define FALSE 0
+
+      enum TYPE { PATH, GROUP, HOOK, BACKREF, SET, RANGEAB, META, POINT, SIMPLE };
+
+      struct RE {
+        char     *ptr;
+        int       len;
+        enum TYPE type;
+      };
+
+      static int  walker ( struct RE  rexp );
+      static int  cutPath( struct RE *rexp, struct RE *track );
+
+      unsigned int regexp3( char *txt, char *re ){
+        struct RE    rexp;
+        rexp.ptr     = re;
+        rexp.len     = strlen( re );
+        rexp.type    = PATH;
+
+        return walker( rexp );
+      }
+
+      static int walker( struct RE rexp ){
+        struct RE track;
+
+        printf( "%-20s >>%.*s<<\n", "walker INIT", rexp.len, rexp.ptr );
+        while( cutPath( &rexp, &track ) )
+          printf( "%-20s >>%.*s<<\n", "walker PATH", track.len, track.ptr );
+
+        return FALSE;
+      }
+
+      static int cutPath( struct RE *rexp, struct RE *track ){
+        if( rexp->len == 0 ) return FALSE;
+
+        *track = *rexp;
+
+        for( int i = 0, deep = 0; i < rexp->len; i++ ){
+          if( rexp->ptr[ i ] ==  '(' )  deep++;
+          if( rexp->ptr[ i ] ==  ')' )  deep--;
+          if( rexp->ptr[ i ] ==  '|' && deep == 0 ){
+            track->len  = i;
+            rexp->ptr  += i + 1;
+            rexp->len  -= i + 1;
+            return TRUE;
+          }
+        }
+
+        rexp->ptr += rexp->len;
+        rexp->len  = 0;
+
+        return TRUE;
+      }
+    #+END_SRC
+
+    Esta es la primer version de nuestro motor, la unica caracteristica que
+    posee es optener las rutas de ejecucion de la exprecion que recive. Coloca
+    el codigo dentro de un fichero al que deberas llamar @f(regexp3.h), luego
+    crea un fichero de nombre @f(test.c) y coloca lo siguiente
+
+    #+BEGIN_SRC c
+      #include "regexp3.h"
+
+      int main(){
+        regexp3( "", "ruta1|ruta2|ruta3" );
+
+        return 0;
+      }
+    #+END_SRC
+
+    en este fichero aplicaremos diversas pruebas al motor para virificar el
+    correcto funcionamiento de cada caracteristica que vallamos agregando.
+
+    Compila el codigo con el siguiete comando
+
+    #+BEGIN_SRC sh
+      gcc -Wall test.c
+    #+END_SRC
+
+    y ejecuta la prueba con
+
+    #+BEGIN_SRC sh
+      ./a.out
+    #+END_SRC
+
+    el resultado de la exprecion @c("ruta1|ruta2|ruta3") es el siguiente
+
+    #+BEGIN_EXAMPLE
+      walker INIT          >>ruta1|ruta2|ruta3<<
+      walker PATH          >>ruta1<<
+      walker PATH          >>ruta2<<
+      walker PATH          >>ruta3<<
+    #+END_EXAMPLE
+
+    Antes de realizar nada @c(walker) muestra la exprecion inicial, luego,
+    optiene y despliega de izquierda a derecha las rutas de ejecucion de la
+    expresion.
+
+    Vamos con la explicacion del codigo en @f(regexp3.h)
+
+    #+BEGIN_SRC c
+      #include <stdio.h>   // ➊
+      #include <string.h>  // ➋
+
+      #define TRUE  1      // ➌
+      #define FALSE 0      // ➍
+
+      enum TYPE { PATH, GROUP, HOOK, BACKREF, SET, RANGEAB, META, POINT, SIMPLE };  // ➎
+
+      struct RE {          // ➏
+        char     *ptr;
+        int       len;
+        enum TYPE type;
+      };
+
+      static int walker ( struct RE  rexp );                    // ➐
+      static int cutPath( struct RE *rexp, struct RE *track );  // ➑
+    #+END_SRC
+
+    se utiliza @c(stdio) para mostrar la informacon ➊, @c(string) ➋ para
+    optener la longitud de la cadena que contiene la regexp.
+
+    C, por defecto no tiene constantes que definan verdadero o falso. Reparamos
+    esta carencia mediante las constantes de macro @c(TRUE) ➌ (veradero) y
+    @c(FALSE) ➍ (falso).
+
+    Luego con la enumeracion @c(TYPE) generamos constantes que representan los
+    diversos tipos de constructor ➎.
+
+    La estructura @c(RE) ➏ sera el contenedor de los constructores.
+
+    En C, antes de utilizar una funcion tenemos que escribir su definicion, o
+    declarar un prototipo de funcion y realizar la definicion mas adelante. Se
+    opta por declarar los prototipos para que la lectura del codigo fluya de
+    forma descendente ➐➑ segun se van utilizando las funciones.
+
+    #+BEGIN_SRC c
+      unsigned int regexp3( char *txt, char *re ){
+        struct RE    rexp;             // ➊
+        rexp.ptr     = re;             // ➋
+        rexp.len     = strlen( re );   // ➌
+        rexp.type    = PATH;           // ➍
+
+        return walker( rexp );         // ➎
+      }
+    #+END_SRC
+
+    @c(regexp3) la funcion principal del motor, solicita una instancia de la
+    estructura @c(RE) y apropiadamente la llama @c(rexp) (Regular EXPresion)
+    ➊.
+
+    Inicializamos el contenedor @c(rexp) con los datos que contiene @c(char
+    *re):
+
+    1. El inicio de la expresion apunta al inicio de la cadena ➋.
+
+    2. La longitud de la expresion es la longitud de la cadena ➌.
+
+    3. Ya que toda regexp sin importar la cantidad y tipos de constructores que
+       la conforman contiene almenos una ruta de ejecucion, asignamos el tipo
+       (generico) @c(PATH) ➍.
+
+
+    La funcion termina devolviendo el valor de la consulta a @c(walker), quien
+    de momento se limita a recorrer, generar y mostrar las rutas de ejecucion de
+    la exprecion ➎.
+
+    Es importante resaltar que @e(ninguna funcion modifica ni la exprecion, ni
+    la cadena de busqueda). El recorrido, comparacion y generacion de
+    constructores siempre se realiza mediante referencias a puntos en cadena y
+    regexp, el unico defecto de este enfoque, es un eficiente manejo de
+    recursos... je!.
+
+    #+BEGIN_SRC c
+      static int walker( struct RE rexp ){
+        struct RE track;                                                      // ➊
+
+        printf( "%-20s >>%.*s<<\n", "walker INIT", rexp.len, rexp.ptr );      // ➋
+        while( cutPath( &rexp, &track ) )                                     // ➌
+          printf( "%-20s >>%.*s<<\n", "walker PATH", track.len, track.ptr );  // ➍
+
+        return FALSE;                                                         // ➎
+      }
+    #+END_SRC
+
+    @c(walker) debe optener (y mas adelante buscar) las rutas de ejecucion, lo
+    cual logra con un bucle @c(while) y la fucion @c(cutPath) ➌.
+
+    En lenguaje comun, la funcion dice: tomo una regexp (@c(rexp)), la corto en
+    secciones @c(PATH) (@c(cutPath)), una a la vez, cada seccion se almacena en
+    el contenedor @c(track) ➊, para comprobar que el resultado es correcto se
+    muestra su contenido ➍. Este ciclo continua hasta agotar la regexp
+    (@c(while)). Si el ciclo termina sin la coincidencia de ninguna ruta, la
+    regexp (como conjunto) no coincide ➎.
+
+    La funcion auxiliar @c(cutPath) se encarga de cortar la ruta mas a la
+    izquierda de una expresion. Si solo hay una ruta, el corte abarca la
+    expresion entera.
+
+    #+BEGIN_SRC c
+      static int cutPath( struct RE *rexp, struct RE *track ){
+        if( rexp->len == 0 ) return FALSE;  // ➊
+
+        *track = *rexp;                     // ➋
+
+        for( int i = 0, deep = 0; i < rexp->len; i++ ){  // ➌
+          if( rexp->ptr[ i ] ==  '(' )  deep++;          // ➍
+          if( rexp->ptr[ i ] ==  ')' )  deep--;          // ➎
+          if( rexp->ptr[ i ] ==  '|' && deep == 0 ){     // ➏
+            track->len  = i;                // ➐
+            rexp->ptr  += i + 1;            // ➑
+            rexp->len  -= i + 1;            // ➒
+            return TRUE;
+          }
+        }
+
+        rexp->ptr += rexp->len;             // ➓
+        rexp->len  = 0;                     // ⓫
+
+        return TRUE;
+      }
+    #+END_SRC
+
+    Antes de realizar nada debemos comprobar que la regexp tiene algo que
+    cortar, o dicho de otra manera, tiene una longitud mayor a cero ➊. Podemos
+    configurar el codigo de 2 maneras:
+
+    #+BEGIN_SRC c
+      static int cutPath( struct RE *rexp, struct RE *track ){
+        if( rexp->len > 0 ){
+          // acciones
+          return TRUE;
+        }
+
+        return FALSE;
+      }
+    #+END_SRC
+
+    o
+
+    #+BEGIN_SRC c
+      static int cutPath( struct RE *rexp, struct RE *track ){
+        if( rexp->len == 0 ) return FALSE;
+
+        // acciones
+        return TRUE;
+      }
+    #+END_SRC
+
+    ambas son validas, elijo la segunda, el codigo tiene dos lineas y un nivel
+    de anidamiento menos. En cuanto a la comprobacion de la segunda opcion
+    @c(==) y no @c(<=), se debe a que supongo (remarcando @e(supongo)) que
+    @c(==) es mas eficiente que @c(<=), ademas, nunca deberia presentarse un
+    caso en el cual la expresion tenga longitud negativa, o no? digo, como un
+    miembro de la raza mas desarrollada de este pequeño planeta azul podria
+    cometer un error al codificar algo tan sencillo... (¬‿¬)!
+
+    Realizamos un ciclo que recorre la exprecion en busca del operador @c(|) ➏,
+    si se encuentra fuera de una agrupacion ➍➎ tenemos nuestra ruta. Recordemos
+    que el operador @c[(] abre una agrupacion y @c[)] la cierra, a si mismo una
+    agrupacion puede agrupar otras agrupaciones, es decir, existen distintos
+    niveles de anidamiento o "profundidad". Nuestra funcion solo se interesa en
+    las rutas de primer nivel (@c(deep == 0)).
+
+    Ahora, independientemente del punto donde este (o no) el operador @c(|), la
+    seccion (@c(track)) inicia donde inicia la regexp (@c(rexp)), tiene la misma
+    longitud (a menos que el ciclo demuestre lo contrario) y se asume que sean
+    del mismo tipo (@c(PATH)).
+
+    asi, en lugar de tener
+
+    #+BEGIN_SRC c
+      track->ptr  = rexp->ptr;
+      track->len  = rexp->len;
+      track->type = rexp->type;
+    #+END_SRC
+
+    tenemos @c(*track = *rexp) ➋.
+
+    Si encontramos el operador @c(|), se modifica la longitud de la seccion ➐ a
+    la vez que se "corta" de la expresion ➐➑, el @c(+ 1) es para descartar el
+    signo @c(|), pues una vez optenemos el constructor, este deja de tener
+    utilidad.
+
+    #+BEGIN_EXAMPLE
+      cutPath llamada uno
+      expresion  "ruta1|ruta2|ruta3"
+      seccion    "ruta1"
+      retono     TRUE
+
+      cutPath llamada dos
+      expresion        "ruta2|ruta3"
+      seccion          "ruta2"
+      retono     TRUE
+
+      cutPath llamada tres
+      expresion              "ruta3"
+      seccion                "ruta3"
+      retono     TRUE
+
+      cutPath llamada cuatro
+      expresion                    ""
+      seccion
+      retono     FALSE
+    #+END_EXAMPLE
+
+    como muestra el ejemplo, en la tercer llamada a @c(cutPath), la seccion es
+    igual a la expresion. El corte deja el punto de inicio de la exprecion en la
+    ultima posicion ➓ con una longitud de cero caracteres ⓫.
+
+*** simple & group
+*** hook
+*** match
+*** loops
+*** set & meta & point
+*** mods
+*** Catch
+*** backreferences
+*** Stand Alone Complex
+* Regexp3 (UTF-8)
+** utf-8
+** codigo
+** xx.*yy
+* Regexp4
+** El raptor necesita un mapa
+** Lista de instrucciones
+** showTable
+** interprete
+** good by cruel regexp
+* fuentes
+
+  https://blog.staffannoteberg.com/2013/01/30/regular-expressions-a-brief-history/
+
+  https://en.wikipedia.org/wiki/Regular_expression
+
+  https://es.wikipedia.org/wiki/Expresi%C3%B3n_regular
+
+  https://es.wikipedia.org/wiki/Grep
+
+  https://es.wikipedia.org/wiki/ASCII
+
+  https://es.wikipedia.org/wiki/UTF-8
+
+  https://es.wikipedia.org/wiki/Byte
+
+  Mastering Regular Expressions, 2nd Edition By Jeffrey E. F. Friedl
+  https://se.ifmo.ru/~ad/Documentation/Mastering_RegExp/mastregex2-CHP-4-SECT-3.html

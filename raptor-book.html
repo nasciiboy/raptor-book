@@ -1,0 +1,2343 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="es" xml:lang="es">
+<head>
+<title>Recursive Regexp Raptor</title>
+<!-- 2017-01-10 Tue 16:27 -->
+<meta  http-equiv="Content-Type" content="text/html;charset=utf-8" />
+<meta  name="generator" content="Org-mode" />
+<meta  name="author" content="nasciiboy" />
+<link rel="stylesheet" type="text/css" href="worg-data/worg.css" />
+</head>
+<body>
+<div id="content">
+<h1 class="title">Recursive Regexp Raptor</h1>
+<div id="table-of-contents">
+<h2>&Iacute;ndice</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#sec-1">Introduccion</a>
+<ul>
+<li><a href="#sec-1-1">Sobre el libro&#x2026; y otras cosas</a>
+<ul>
+<li><a href="#sec-1-1-1">otras cosas</a></li>
+<li><a href="#sec-1-1-2">Como leer el libro</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#sec-2">RegExp</a>
+<ul>
+<li><a href="#sec-2-1">Sintaxis RegExp</a>
+<ul>
+<li><a href="#sec-2-1-1">Caracter</a></li>
+<li><a href="#sec-2-1-2">Conjunto</a></li>
+<li><a href="#sec-2-1-3">Rangos</a></li>
+<li><a href="#sec-2-1-4">Conjunto inverso</a></li>
+<li><a href="#sec-2-1-5">Punto</a></li>
+<li><a href="#sec-2-1-6">Cuantificación</a></li>
+<li><a href="#sec-2-1-7">Alternación</a></li>
+<li><a href="#sec-2-1-8">Agrupación</a></li>
+<li><a href="#sec-2-1-9">Metacaracteres</a></li>
+<li><a href="#sec-2-1-10">Modiicadores</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#sec-3">Regexp3 (ASCII)</a>
+<ul>
+<li><a href="#sec-3-1">Herramientas</a></li>
+<li><a href="#sec-3-2">Mr. Raptor</a></li>
+<li><a href="#sec-3-3">El truco</a></li>
+<li><a href="#sec-3-4">La Sintaxis</a></li>
+<li><a href="#sec-3-5">El algoritmo</a>
+<ul>
+<li><a href="#sec-3-5-1">Como interpretar la regexp</a></li>
+<li><a href="#sec-3-5-2">Pseudocodigo</a></li>
+<li><a href="#sec-3-5-3">Diagrama</a></li>
+</ul>
+</li>
+<li><a href="#sec-3-6">codigo</a>
+<ul>
+<li><a href="#sec-3-6-1">interfaz</a></li>
+<li><a href="#sec-3-6-2">constructores</a></li>
+<li><a href="#sec-3-6-3">path</a></li>
+<li><a href="#sec-3-6-4">simple &amp; group</a></li>
+<li><a href="#sec-3-6-5">hook</a></li>
+<li><a href="#sec-3-6-6">match</a></li>
+<li><a href="#sec-3-6-7">loops</a></li>
+<li><a href="#sec-3-6-8">set &amp; meta &amp; point</a></li>
+<li><a href="#sec-3-6-9">mods</a></li>
+<li><a href="#sec-3-6-10">Catch</a></li>
+<li><a href="#sec-3-6-11">backreferences</a></li>
+<li><a href="#sec-3-6-12">Stand Alone Complex</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#sec-4">Regexp3 (UTF-8)</a>
+<ul>
+<li><a href="#sec-4-1">utf-8</a></li>
+<li><a href="#sec-4-2">codigo</a></li>
+<li><a href="#sec-4-3">xx.*yy</a></li>
+</ul>
+</li>
+<li><a href="#sec-5">Regexp4</a>
+<ul>
+<li><a href="#sec-5-1">El raptor necesita un mapa</a></li>
+<li><a href="#sec-5-2">Lista de instrucciones</a></li>
+<li><a href="#sec-5-3">showTable</a></li>
+<li><a href="#sec-5-4">interprete</a></li>
+<li><a href="#sec-5-5">good by cruel regexp</a></li>
+</ul>
+</li>
+<li><a href="#sec-6">fuentes</a></li>
+</ul>
+</div>
+</div>
+<blockquote>
+<p>
+«La conciencia es el patron que se forma cuando apredemos a mirar hacia atras
+de nosotros mismos, incluso antes de nuestra propia existencia.»
+</p>
+</blockquote>
+
+<div id="outline-container-sec-1" class="outline-2">
+<h2 id="sec-1">Introduccion</h2>
+<div class="outline-text-2" id="text-1">
+<p>
+Al igual que muchos de mis predecesores, quede fascinado por la utilidad de
+las expresiones regulares.
+</p>
+
+<p>
+Probablemente no hayas encontrado informacion sobre como construir un motor de
+expresiones regulares (ni sobre su funcionamiento) o la disponible se enfoque
+solamente en fundamentos matematicos, para los cuales el autor no muestra un
+metodo para transladarlos al mundo real (<em>codigo</em>).
+</p>
+
+<p>
+Has acudido al codigo de alguna implementacion en busca de conocimiento
+practico?  Y&#x2026; encotraste codigo rebuscado y mistico repartido en infinidad
+de ficheros, llenos de macros, guiones bajos y variables cripticas.
+</p>
+
+<p>
+Pues bien, este libro va de construir un motor de expresiones regulares paso a
+paso, con mucho codigo y poca teoria. Nada de cerraduras de Kleene, NFA o
+DFA. Principalmente por el autor no tiene ni idea de matematicas y su
+conocimiento se limita a un par de libros de programacion en lenguaje
+C/C++&#x2026; ¯\_(ツ)_/¯
+</p>
+
+<p>
+El autor de este libro reconoce que este precedente no genera mucha
+expectativa, pero confia plenamente en la simplesa de su implementacion,
+fundamentada en cientos de horas frente a un par de monitores.
+</p>
+
+<p>
+Para afrontar la construccion de este particular motor de expreciones
+regulares escrito en lenguaje C, se asume que tienes conocimientos intermedios
+de programacion, particularmente con algun lenguaje basado en C y que dispones
+de las siguientes herramientas:
+</p>
+
+<ul class="org-ul">
+<li>Un buen compilador de C (C99) (<em>GNU GCC</em> o <em>LLVM</em>).
+</li>
+
+<li><em>GNU Emacs</em> o algun simple "editor" de texto.
+</li>
+
+<li>Un terminal con un interprete de comandos (como bash) o un entrorno que te
+permita enviar ordenes al compilador, ejecutar programas y ver su salida.
+</li>
+
+<li>Buena musica! Programar sin musica no vale la pena!
+</li>
+</ul>
+</div>
+
+<div id="outline-container-sec-1-1" class="outline-3">
+<h3 id="sec-1-1">Sobre el libro&#x2026; y otras cosas</h3>
+<div class="outline-text-3" id="text-1-1">
+<p>
+El libro se divide en cuatro secciones:
+</p>
+
+<ul class="org-ul">
+<li><a href="#sec-2">RegExp</a> expone una breve explicacion de lo que son las expresiones
+regulares y su sintaxis.
+</li>
+
+<li><a href="#sec-3">Regexp3 (ASCII)</a> muestra como imprementar un motor de expresiones regulares
+basado en el sitema de codificacion de caracteres <abbr>ASCII</abbr>.
+</li>
+
+<li><a href="#sec-4">Regexp3 (UTF-8)</a> toma el codigo e ideas expuestas en <a href="#sec-3">Regexp3 (ASCII)</a>
+agregando algunas utilidades basicas para manejar la codificacion de
+caracteres <abbr>UTF-8</abbr>
+</li>
+
+<li>Finalmente la seccion <a href="#sec-5">Regexp4</a> se centra en mejorar el desempeño del motor
+implementando una "tabla de instrucciones", se modifican elementos de la
+sintaxis y se agregan nuevas caracteristicas.
+</li>
+</ul>
+</div>
+
+<div id="outline-container-sec-1-1-1" class="outline-4">
+<h4 id="sec-1-1-1">otras cosas</h4>
+<div class="outline-text-4" id="text-1-1-1">
+<p>
+Este libro asi como todo el codigo que en el aparece esta cubierto por
+licencias con derechos de izquierda (Copileft).
+</p>
+
+<p>
+Para el libro se utiliza la licencia GNU FDL version 1.3.
+</p>
+
+<p>
+Para el codigo se utiliza la licencia GNU GPL version 3.
+</p>
+
+<p>
+El libro deberia estar acompañado por copias de ambas licencias, en caso
+contrario puede optener una copia desde
+<a href="https://www.gnu.org/licenses/fdl-1.3.html">https://www.gnu.org/licenses/fdl-1.3.html</a> y
+<a href="https://www.gnu.org/licenses/gpl.html">https://www.gnu.org/licenses/gpl.html</a>
+</p>
+
+<p>
+En esencia para el codigo fuente tienes:
+</p>
+
+<ul class="org-ul">
+<li>la libertad para utilizar el software para cualquier proposito,
+</li>
+<li>la libertad para modificar el software para que se adapte a tus necesidades,
+</li>
+<li>la libertad para compartir el software con tus amigos y vecinos, y
+</li>
+<li>la libertad para compartir los cambios que tu hagas.
+</li>
+</ul>
+
+
+<p>
+Estas libertades se aplican tambien al libro. Puedes copiar y redistribuir
+el trabajo, con o sin modificaciones y de forma comercial o no comercial.
+</p>
+
+<p>
+Todo aquel que obtenga una copia de este material tiene derecho a conservar
+las mimas condicines de uso, es decir, tanto el original como las versiones
+modificadas tendran la misma licencia.
+</p>
+
+<p>
+El codigo de este libro se encuentra alojado en
+<a href="https://github.com/nasciiboy/raptor-book">https://github.com/nasciiboy/raptor-book</a>, bajo el sistema de control de
+versiones <code class="command">git</code>.
+</p>
+
+<p>
+Puedes clonar el repositiro con el comando:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">git clone https://github.com/nasciiboy/raptor-book.git</pre>
+</div>
+
+<p>
+Cualquir duda o contrubucion sera bien resivida en el correo electronico
+<a href="mailto:nasciiboy@gmail.com">mailto:nasciiboy@gmail.com</a>.
+</p>
+
+<p>
+El codigo fuente del manual esta escrito con un lenguaje de marcas ligeras
+aun en desorrollo llamado morg. Tambien se ofrecen versiones en html (libre
+de javascrip) y en formato ebook (de momento generadas mediante org-mode).
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-1-1-2" class="outline-4">
+<h4 id="sec-1-1-2">Como leer el libro</h4>
+<div class="outline-text-4" id="text-1-1-2">
+<p>
+<em>Si, en este libro no hay ningun acento</em> (y probablemente tenga una
+terrible ortografia y/o redaccion). El autor considera que la mejor
+forma de leer cualquier documento es en formato de texto plano (detro de
+<em>Emacs</em>) pues permite entre otras cosas:
+</p>
+
+<ul class="org-ul">
+<li>Preservar el material atraves de los tiempos
+</li>
+
+<li>Facil difucion. No cuenta con ningun ridiculo sistema de "proteccion"
+</li>
+
+<li>Adaptarlo a diversos formatos con el minimo esfuerzo
+</li>
+
+<li>Realizar busquedas eficientes. Punto donde los acentos son un
+inconveniente
+</li>
+
+<li>La interaccion directa con la interfaz humano-maquina mas eficiente, el
+teclado
+</li>
+</ul>
+
+
+<p>
+Respecto al codigo, en cada seccion se agregan funcionalidades de forma
+incremental y cada seccion depende de la anterior. Por lo general se
+presenta todo el codigo necesario al inicio del tema, para luego examinar
+los puntos relevantes.
+</p>
+
+<p>
+Dentro del codigo no se incluye ningun comentario que explique la finalidad
+de ninguna declaracion.
+</p>
+
+<p>
+Supuestamente cuando se escribe codigo con una estructura razonable, nombres
+descriptivos y que puede leerse de forma descendente, no es necesaria
+ninguna aclaracion. Obviamente, se presupone que el codigo aqui expuesto
+cumple estos requisitos&#x2026;
+</p>
+
+<p>
+Actualmente la libreria sigue en desarrollo en dos repositorios
+</p>
+
+<p>
+<a href="https://github.com/nasciiboy/RecursiveRegexpRaptor">https://github.com/nasciiboy/RecursiveRegexpRaptor</a> alias Regexp3: El punto
+de partida de la libreria. Es interesante ver los cambios entre cada version
+en particular el codigo inicial.
+</p>
+
+<p>
+<a href="https://github.com/nasciiboy/RecursiveRegexpRaptor-4">https://github.com/nasciiboy/RecursiveRegexpRaptor-4</a> alias Regexp4: La ruta
+actual de desarrollo. En su base contiene a Regexp3, con la unica diferencia
+de ser mas eficiente respecto al consumo de CPU.
+</p>
+
+<p>
+Bien podrias acudir directamente al codigo de ambas versiones y tomar este
+libro como una version super explicita de su funcionamiento.
+</p>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2" class="outline-2">
+<h2 id="sec-2">RegExp</h2>
+<div class="outline-text-2" id="text-2">
+<p>
+Una Expresion regular es una secuencia de caracteres que define un patron de
+busqueda. Son mejor conocidas por las contracciones <em>RegExp</em>, <em>RegEx</em> y
+<em>RE</em> del original <q>Regular Expressions</q> en ingles. La aplicacion principal
+de las <em>RegExp</em> es localizar patrones para filtrar informacion, validar
+datos y manipular texto.
+</p>
+
+<p>
+Se originaron en 1956, cuando el matematico <em>Stephen Kleene</em> describio los
+<em>lenguajes regulares</em> utilizando su propia notacion matematica llamada
+<em>conjuntos regulares</em>.
+</p>
+
+<p>
+En 1968, <em>Ken Thompson</em> pionero de Unix publico el articulo «Regular
+Expression Search Algorith» que contenia la descripcion tecnica de un
+compilador de expresiones regulares junto con codigo en Algol-60, mas tarde,
+implementaria por vez primera en un programa informatico el uso de expresiones
+regulares con la notacion de Kleene, especificamente en el editor de texto
+<code class="command">QED</code>. El objetivo era que el usuario pudiese hacer comparacion de patrones
+avanzados en archivos de texto. En 1969 esta capacidad fue incorporada al
+editor <code class="command">ed</code> (creacion de Thompson), en forma del comando <code>g/re/p</code> que
+proviene de «globally/regular expresion/print» y significa «<em>g</em>lobally
+search a <em>r</em>egular <em>e</em>xpression and <em>p</em>rint» (has una busqueda global
+para las lineas que coincidan con la expresion regular e imprimelas).
+</p>
+
+<p>
+El comando <code>g/re/p</code> dio como resultado el programa independiente
+<code class="command">grep</code>
+(tambien obra de Thompson), lanzado en la cuarta edicion de Unix en 1973. Sin
+embargo, grep no tenia una implementacion completa de expresiones regulares,
+no fue hasta el año 1979, en la septima edicion de Unix que el programa
+<code class="command">egrep</code> (extended grep) (creacion de <em>Alfred Aho</em>) logro traducir cualquier expresion
+regular a su correspondiente algoritmo DFA.
+</p>
+
+<p>
+Alrededor de la misma epoca en la que Thompson desarrollo <code class="command">QED</code>, un grupo de
+investigadores, puso en marcha una herramienta basada en Expresiones
+Regulares, en esta ocacion su funcion fue el analisis lexico en el diseño de
+compiladores.
+</p>
+
+<p>
+En la decada de los 70's muchas variaciones de las regexp implementadas en
+Unix se incorporaron a programas como <code class="command">vi</code>, <code class="command">lex</code>, <code class="command">sed</code>, <code class="command">awk</code>,
+<code class="command">expr</code>, <code class="command">emacs</code>, etc.
+</p>
+
+<p>
+En la decada de los 80's, las expresiones regulares mas complejas aparecieron
+en el lerguaje de programacio <em>Perl</em>, derivadas de la biblioteca <em>regexp</em>
+de <em>Henry Spencer</em> (1986).
+</p>
+
+<p>
+Inevitablemente la Jihad RegExp se extendio a la mayoria de lenguajes de
+programacion, shell's, bases de datos, servidores web, editores de texto,
+navegadores de ficheros y un variado numero de programas en forma de pequeñas
+utilidades.
+</p>
+</div>
+
+<div id="outline-container-sec-2-1" class="outline-3">
+<h3 id="sec-2-1">Sintaxis RegExp</h3>
+<div class="outline-text-3" id="text-2-1">
+<p>
+Las RegExp estan formadas por una serie de constructores que pueden
+convinarse libremente entre si. Como no podria ser de otra forma los
+constructores no son mas que una serie de caracteres (numeros, letras o
+signos de puntuacion) a los que se atribuye un comportaminto especifico.
+</p>
+
+<p>
+La sintaxis de los constructores puede variar de un motor/programa/lenguaje a
+otro, sin embargo por lo general se siguen las siguientes convenciones:
+</p>
+</div>
+
+<div id="outline-container-sec-2-1-1" class="outline-4">
+<h4 id="sec-2-1-1">Caracter</h4>
+<div class="outline-text-4" id="text-2-1-1">
+<p>
+Se consideran caracteres todos los numeros, letras o signos de puntuacion
+cuyo unico significado es la coincidencia con el propio caracter.
+</p>
+
+<p>
+Dentro del motor su evaluacion es secuencial. Es decir, un patron compuesto
+unicamente por caracteres solo puede coincidir si cada uno de sus elementos
+esta precente en el texto de busqueda, de forma secuencial. En terminos
+simples esto significa que cualquier palabra esta conformada por sus
+constructores <em>caracter</em>
+</p>
+
+<pre class="src"><code class="src src-c"><span class="src-string">"palabra"</span> ==  <span class="src-string">'p'</span>, <span class="src-string">'a'</span>, <span class="src-string">'l'</span>, <span class="src-string">'a'</span>, <span class="src-string">'b'</span>, <span class="src-string">'r'</span>, <span class="src-string">'a'</span></code></pre>
+
+<p>
+De forma explicita el patron de busqueda <code>palabra</code> dice al motor lo
+siguiente: Busca el constructor de tipo caracter <code>p</code>, si lo encuentras
+avanza una posicion dentro del texto de busqueda y comparalo con el
+constructor de tipo caracater <code>a</code>, si lo encuentras avanza una posicion
+dentro del texto de busqueda y compararlo con el constructor de tipo
+caracter <code>l</code>, &#x2026;, si llegas hasta el ultimo constructor tipo caracter
+(ultima <code>a</code>) el patron a sido localizado, de otra forma no hay
+coincidencia.
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-1-2" class="outline-4">
+<h4 id="sec-2-1-2">Conjunto</h4>
+<div class="outline-text-4" id="text-2-1-2">
+<p>
+El constructor <em>Conjunto</em> permite agrupar una serie de constructores
+caracter para compararlos con una posicion especifica del texto de busqueda.
+</p>
+
+<p>
+Los constructores se delimitan dentro de los signos "especiales" '[' y ']'.
+</p>
+
+<p>
+La expresion:
+</p>
+
+<pre class="src"><code class="src src-c"><span class="src-string">"199[56789]"</span></code></pre>
+
+<p>
+le indica lo siguiente al motor: Busca el constructor de tipo caracter
+<code>1</code>, si lo encuentras avanza una posicion dentro del texto de busqueda y
+comparalo con el constructor que de tipo caracter <code>9</code>, si lo encuentras
+avanza una posicion dentro del texto de busqueda y compararlo con el
+constructor de tipo caracter <code>9</code>, si lo encuentras avanza una posicion
+dentro del texto de busqueda y comparalo con alguno de estos constructores
+de tipo caracter <code>5</code>, <code>6</code>, <code>7</code>, <code>8</code> o <code>9</code>, Si el caracter del
+texto  coincide con alguno  de estos caracteres se ha encontrado el patron,
+de otro modo la busqueda ha fallado.
+</p>
+
+<p>
+Es decir el patron <code>199[56789]</code> coincide con las siguientes cadenas de
+caracteres: <code>"1995"</code>, <code>"1996"</code>, <code>"1997"</code>, <code>"1998"</code> o <code>"1999"</code>
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-1-3" class="outline-4">
+<h4 id="sec-2-1-3">Rangos</h4>
+<div class="outline-text-4" id="text-2-1-3">
+<p>
+Un conjunto agrupa una serie de constructores caracter, pues bien, cuando
+los miembros dichos del conjunto forman una secuencia alfabetica entre <code>a</code>
+y <code>z</code>, entre <code>A</code> y <code>Z</code>) o entre <code>0</code> y <code>9</code>, es posible abreviar
+dicha secuencia, uniendo el elemento inicial con el elemento final de la
+secuencia mediante el signo '-', por ejemplo la exprecion
+</p>
+
+<pre class="src"><code class="src src-c"><span class="src-string">"199[56789]"</span></code></pre>
+
+<p>
+es equivalente a la exprecion:
+</p>
+
+<pre class="src"><code class="src src-c"><span class="src-string">"199[5-9]"</span></code></pre>
+
+<p>
+la exprecion
+</p>
+
+<pre class="src"><code class="src src-c"><span class="src-string">"Unidad-[ABCDEFGHIJK]"</span></code></pre>
+
+<p>
+es equivalente a
+</p>
+
+<pre class="src"><code class="src src-c"><span class="src-string">"Unidad-[A-K]"</span></code></pre>
+
+<p>
+el signo <code>-</code> no tiene efecto fuera del constructor agrupacion, por lo que
+se interpreta como un simple caracter <code>-</code>
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-1-4" class="outline-4">
+<h4 id="sec-2-1-4">Conjunto inverso</h4>
+<div class="outline-text-4" id="text-2-1-4">
+<p>
+La utlima facilidad que proporciona el constructor conjunto consiste en
+coincidir solo si ninguno de sus elementos esta precente en el texto de
+busqueda, es decir <em>invierte</em> el resultado de la busqueda. La forma de
+indicar al motor este comportamiento es colocar el signo <code>^</code> como primer
+elemento del constructor conjunto. Por ejemplo la expresion
+</p>
+
+<pre class="src"><code class="src src-c"><span class="src-string">"&lt;[^&gt;]&gt;"</span></code></pre>
+
+<p>
+Es util para localizar <em>etiquetas</em> de un solo caracter por ejemplo
+<code>&lt;A&gt;</code>, <code>&lt;B&gt;</code>, <code>&lt;C&gt;</code>, <code>&lt;D&gt;</code>, <code>&lt;E&gt;</code>, etc.
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-1-5" class="outline-4">
+<h4 id="sec-2-1-5">Punto</h4>
+<div class="outline-text-4" id="text-2-1-5">
+<p>
+El constructor punto representado por el signo <code>.</code> se utiliza para
+realizar una coincidencia con cualquier caracter presente en el texto de
+busqueda.
+</p>
+
+<p>
+Por lo general se suele excluir el caracter <code>\n</code> (salto de linea). la
+razon de este comportamiento es solamente por practicidad aunque
+conceptualmente no existe un motivo para ello.
+</p>
+
+<p>
+El constructor punto no tiene efecto dentro de un conjunto, en su lugar se
+evalua como <em>el caracter</em> <code>.</code>. No tiene sentido que un conjunto coincida
+con cualquier caracter.
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-1-6" class="outline-4">
+<h4 id="sec-2-1-6">Cuantificación</h4>
+<div class="outline-text-4" id="text-2-1-6">
+<p>
+Por defecto, el motor asume un constructor ha de estar presente almenos una
+vez, no obstante es posible especificar cuantas veces consecutivas puede
+aparecer un constructor. Para esto se hace uso de los <em>cuantificadores</em>
+que mas que un "constructor", <em>son una caracteristica de un constructor</em>.
+</p>
+
+<p>
+Los cuantificadores se colocan justo al final del cosntructor al que han de
+aplicarse. El constructor alternacion, que veremos mas adelante no es
+compatible con los cuantificadores.
+</p>
+
+<dl class="org-dl">
+<dt> <code>?</code> </dt><dd>      El constructor puede aparecer cero o una vez. Por ejemplo, <code>ob?scuro</code> se
+corresponde con <code>oscuro</code> y <code>obscuro</code>.
+</dd>
+
+<dt> <code>+</code> </dt><dd>      El elemento debe aparecer al menos una vez. Por ejemplo, <code>ho+la</code> describe
+el patron infinito <code>hola</code>, <code>hoola</code>, <code>hooola</code>, <code>hoooola</code>, &#x2026;,
+</dd>
+
+<dt> <code>*</code> </dt><dd>      El elemento puede aparecer cero, una, o más veces. Por ejemplo, <code>0*42</code> se
+corresponde con <code>42</code>, <code>042</code>, <code>0042</code>, <code>00042</code>, &#x2026;,
+</dd>
+
+<dt> <code>{n}</code> </dt><dd>      El elemento debe aparecer exactamente <span id="math">n</span> veces. Por ejemplo
+<code>[0-9]{3}</code> se corresponden con cualquier cifra de tres digitos como
+<code>007</code>, <code>747</code>, <code>777</code>, &#x2026;,
+</dd>
+
+<dt> <code>{a,b}</code> </dt><dd>      El elemento debe aparecer un minimo de <span id="math">a</span> veces y un maximo de <span id="math">b</span>
+veces.
+</dd>
+</dl>
+</div>
+</div>
+
+<div id="outline-container-sec-2-1-7" class="outline-4">
+<h4 id="sec-2-1-7">Alternación</h4>
+<div class="outline-text-4" id="text-2-1-7">
+<p>
+Como ya vimos la agrupacion permite la busqueda de mas de un constructor
+caracter para una posicion especifica. El constructor alternacion se
+comporta de forma idetica, solo que en lugar de manejar constructores
+caracter maneja expreciones delimitadas una de otra por el signo <code>|</code>:
+</p>
+
+<pre class="src"><code class="src src-c">exp1|exp2|exp3|...</code></pre>
+
+<p>
+en este caso el termino <em>exprecion</em> se refiere a una RegExp en si.
+</p>
+
+<p>
+La busqueda de expresiones se realiza de forma secuencial, de izquierda a
+derecha hasta localizar alguna expresion o hasta agotar las
+alternativas. Por ejemplo
+</p>
+
+<pre class="src"><code class="src src-c"><span class="src-string">"Raptor|T Rex|Triceratops"</span></code></pre>
+
+<p>
+genera los patrones de busqueda <code>Raptor</code>, <code>T Rex</code> y <code>Triceratops</code>
+</p>
+
+<p>
+Como ya se menciono en el apartado anterior, los cuantificadores no se
+aplican a este constructor. Para cuantificar las arternativas deben
+encontrarse dentro de una agrupacion.
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-1-8" class="outline-4">
+<h4 id="sec-2-1-8">Agrupación</h4>
+<div class="outline-text-4" id="text-2-1-8">
+<p>
+Una agrupacion permite definir el ámbito y la precedencia de los demás
+constructores. Las agrupaciones se delimitan dentro de las signos <code>(</code> y
+<code>)</code>. Por ejemplo:
+</p>
+
+<pre class="src"><code class="src src-c"><span class="src-string">"(p|m)adre"</span></code></pre>
+
+<p>
+es equivalente a
+</p>
+
+<pre class="src"><code class="src src-c"><span class="src-string">"padre|madre"</span></code></pre>
+
+<p>
+y
+</p>
+
+<pre class="src"><code class="src src-c"><span class="src-string">"(des)?amor"</span></code></pre>
+
+<p>
+se corresponde con <code>amor</code> y con <code>desamor</code>.
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-1-9" class="outline-4">
+<h4 id="sec-2-1-9">Metacaracteres</h4>
+<div class="outline-text-4" id="text-2-1-9">
+<p>
+Para el motor los signos <code>.</code>, <code>(</code>, <code>)</code>, <code>|</code>, <code>[</code>, <code>]</code>, <code>+</code>,
+<code>?</code>, <code>{</code>, <code>}</code>, &#x2026;, etc. tiene un significado especial, ya sea como
+delimitadores, como cuantificadores o como constructores. Como hacer para
+buscar estos signos como simples caracteres?
+</p>
+
+<p>
+Podriamos colocarlos detro de un conjuto de caracteres, asi:
+</p>
+
+<pre class="src"><code class="src src-c"><span class="src-string">"[()|+]"</span></code></pre>
+
+<p>
+pero existen casos complejos como:
+</p>
+
+<pre class="src"><code class="src src-c"><span class="src-string">"[]]"</span></code></pre>
+
+<p>
+cual signo <code>]</code> marca el limite del conjunto?
+</p>
+
+<p>
+Para evitar casos ambiguos se hace uso del constructor <em>metacaracter</em> que
+despoja de su significado <em>especial</em> a los signos antes mencionados.
+</p>
+
+<p>
+El constructor metacaracter suele estar formado por dos signos, el signo que
+indica que se trata de un metacaracter y el signo al que se aplica. Por lo
+general el signo utilizado como indicador es <code>\</code>.
+</p>
+
+<p>
+Ahora podemos solucionar el ejemplo anterior, pasaria a ser:
+</p>
+
+<pre class="src"><code class="src src-c"><span class="src-string">"[\]]"</span></code></pre>
+
+<p>
+que ocurre si se aplica <code>\</code> a un caracter sin significado especial, por
+ejemplo, a <code>d</code>?
+</p>
+
+<pre class="src"><code class="src src-c"><span class="src-string">"\d"</span></code></pre>
+
+<p>
+existen dos posibilidades:
+</p>
+
+<ol class="org-ol">
+<li>El motor interpreta <code>d</code> como un caracter.
+</li>
+
+<li>El motor otorga un significado especial al caracter, como podria ser la
+busqueda de un patron especifico, en cuyo caso, el significado puede
+variar de una implementacion a otra.
+</li>
+</ol>
+
+
+<p>
+Cuando el caso es el segundo, la mayoria de los motores cosidera que el
+metacaracer <code>\d</code> (digit) equivalente al conjunto <code>[0-9]</code>.
+</p>
+
+<p>
+Aqui una lista de los significados comunes de algunos metacaracters
+</p>
+
+<ul class="org-ul">
+<li><code>\d</code> ==&gt; <code>[0-9]</code>
+</li>
+<li><code>\D</code> ==&gt; <code>[^0-9]</code>
+</li>
+<li><code>\a</code> ==&gt; <code>[a-bA-B]</code>
+</li>
+<li><code>\A</code> ==&gt; <code>[^a-bA-B]</code>
+</li>
+<li><code>\w</code> ==&gt; <code>[a-bA-B0-9]</code>
+</li>
+<li><code>\W</code> ==&gt; <code>[^a-bA-B0-9]</code>
+</li>
+<li><code>\s</code> ==&gt; <code>[ \t-\r]</code>
+</li>
+<li><code>\S</code> ==&gt; <code>[^ \t-\r]</code>
+</li>
+</ul>
+
+
+<p>
+Finalmente, podemos utilizar metacaracteres para representar signos no
+impribibles como pueden ser nueva linea, tabulador, retroceso, campana,
+etc.
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-1-10" class="outline-4">
+<h4 id="sec-2-1-10">Modiicadores</h4>
+<div class="outline-text-4" id="text-2-1-10">
+<p>
+Aunque no se definen como tal, los modificadores son una forma de alterar el
+comportamiento del motor al momento de efectuar la busqueda de un patron.
+</p>
+
+<p>
+Pongamos como ejemplo los dos modificadores mas comunes:
+</p>
+
+<dl class="org-dl">
+<dt> <code>^</code> </dt><dd>colocar este signo <em>al inicio</em> de la expresion le indica al
+motor: la busqueda solo sera valida si el patron se encuentra al
+inicio del texto.
+</dd>
+
+<dt> <code>$</code> </dt><dd>colocar este signo <em>al final</em> de la expresion le indica al
+motor: la busqueda solo sera valida si el patron se encuentra al
+final del texto.
+</dd>
+</dl>
+
+
+<p>
+ambos modificadores pueden combinarse dentro de la expresion, indicando: la
+busqueda sera valida si el patron inicia el la posicion inicial del texto y
+finaliza en la ultima posicion.
+</p>
+
+<p>
+Los modificadores al igual que los metacaracteres dependen unicamente de lo
+que especifique cada implementacion.
+</p>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-3" class="outline-2">
+<h2 id="sec-3">Regexp3 (ASCII)</h2>
+<div class="outline-text-2" id="text-3">
+</div><div id="outline-container-sec-3-1" class="outline-3">
+<h3 id="sec-3-1">Herramientas</h3>
+<div class="outline-text-3" id="text-3-1">
+<p>
+Asi que, te has decidido a leer este libro y tienes la suficiente experiencia
+como para escribir, compilar y ejecutar un programa en C.
+</p>
+
+<p>
+No voy a decirte el sistema bajo el que deberias programar, ni si es mejor
+utilizar un editor, un IDE o Emacs, tampoco cual compilador, shell o mapeo de
+teclado sea el mas apropiado. Seguramente has elegido tus herramientas tras
+una profunda refleccion luego evaluar todas las posibilidades y no por que
+alguien te impuso su uso&#x2026;
+</p>
+
+<p>
+No obstante y solamente por motivos informativos, te presento la configuracion
+que utilizo y el porque:
+</p>
+
+<ul class="org-ul">
+<li>Como sistema operativo <em>GNU</em> con <em>Linux</em>. No fue hasta que llegue a la
+distribucion <em>Debian</em>, que conoci lo que era la informatica, lo util de
+los repositorios de software y la existencia del movimiento <em>software
+libre</em>.
+</li>
+
+<li>Como entorno de escritorio grafico <em>Gnome Shell</em>. Es simple, sobrio,
+bonito y eficaz.
+</li>
+
+<li>Donde hay un prompt hay felicidad! No hay mejor herramienta para interactuar
+con el sistema, que una terminal.
+
+<p>
+En particular me gusta <em>Konsole</em>, parte del proyecto KDE. Tiene pestañas
+multiples, pueden desabilitarse el menu y la barra de despalazamiento, para
+ocupar la pantalla completa sin distracciones, ademas la configuracion del
+teclado es muy flexible.
+</p>
+</li>
+
+<li>Quien hace aparecer el prompt es <em>fish</em>, un interpre de comandos con
+colorines y un sistema de autocompletado fantanstico.
+</li>
+
+<li>Para compilar programas C, <em>GCC</em> el compilador de GNU. Ademas suelo pedir
+una segunda opinion al compilador <em>clang</em> (LLVM).
+</li>
+
+<li>Como sistema de control de versiones <em>git</em>. Conocer los comandos basicos
+es mas que suficiente.
+</li>
+
+<li>Los sonidos del mundo son muy aburridos. <em>moc</em> (Music On Console) se
+encarga del amenizar el ambiente con buena musica.
+</li>
+
+<li>La pieza sobre la que gira mi flujo de trabajo se llama <em>GNU Emacs</em>, un
+interprete de Emacs Lisp, que tambien suele utilizarse como editor de texto
+(risas). En serio no compliques tu vida con molestos IDEs llenos de botones,
+menus y mierdas graficas. Todo es mejor en texto plano!
+</li>
+
+<li>Finalmente utilizo el mapeo de teclado <em>programmer dvorak</em> con una ligera
+modificacion (los dos control, mayus, @ y \) y una configuracion de al menos
+dos monitores.
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-3-2" class="outline-3">
+<h3 id="sec-3-2">Mr. Raptor</h3>
+<div class="outline-text-3" id="text-3-2">
+<blockquote>
+<p>
+Disponer del codigo fuente de un programa no garantiza que seamos capaces
+de compreder su funcionamiento. Si para entender un proyecto es necesario
+asistir a su construccion y tener presente todos su detalles ocultos,
+probablemente cuando los desarrolles pasen a otro proyecto nadie este
+dispuesto (o sea capaz) de continuar con el desarrollo.
+</p>
+
+<p>
+Por ello no es suficiente disponer del codigo, ademas, debe ser simple y
+directo, para que otros sean capaces de comprender su funcionamiento.
+</p>
+
+<p>
+El primer paso para lograr este objetivo es dar nombres claros y concisos
+</p>
+</blockquote>
+
+<p>
+De donde surge el nombre del motor?
+</p>
+
+<p>
+La primer version funcional simplemente se llamaba <span id="file">regexp</span>. Pese a ser un
+nombre conciso, ya no estaba disponible, lo cual me obligo a ser un poco mas
+creativo.
+</p>
+
+<p>
+El nombre debia destacar las cualidades del proyecto. Si el motor sobresale
+en algun aspecto es por no tener un manejo explicito de memoria, en su lugar,
+optiene memoria llamando a funciones y llamando a funciones de forma
+recursiva&#x2026; ya esta, <em>RE²</em> (Recursive Regexp), un momento, nooo, google ya
+utiliza este nombre para su motor RegExp <em>RE2</em>, bueno, otra caracteristica
+tendra&#x2026; el codigo es compacto, si, es tan compacto que ha de ser
+ridiculamente eficiente, lo cual lo hace ridiculamente veloz, veloz, veloz,
+rapido, Raptor, <em>Recursive Regexp Raptor</em>, je, que creativo, no puede ser
+RE³ o lo asociaran con google, su alias sera <em>regexp3</em> (es mas comodo
+escribir <code>#include "regexp3"</code> que <code>#include "RecursiveRegexpRaptor.h"</code>,
+ademas, dejo clara su funcion y tiene una longitud similar al de otras
+librerias de C como <code>stdlib</code>, <code>stdio</code> o <code>ctype</code>).
+</p>
+
+<p>
+Una ves desvelado el misterio demos paso a la construccion.
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-3-3" class="outline-3">
+<h3 id="sec-3-3">El truco</h3>
+<div class="outline-text-3" id="text-3-3">
+<p>
+He tratado de mantener el codigo lo mas simple y compacto posible, centrando
+la atencion en los puntos importantes. En la practica esto repercute en tres
+puntos a cosiderar:
+</p>
+
+<ul class="org-ul">
+<li>No se utiliza la sintaxis estadar, tampoco la que maneja Perl. En su lugar
+se opta por la que es mas facil de programar e interpretar.
+</li>
+
+<li>El motor asume que la expresion que resive tiene una sintaxis correcta.
+
+<p>
+En la practica es igual de complejo constuir una programa encargado solo de
+verificar y mostrar los errores de sintaxis, a uno que simplemente busca la
+exprecion. Sin demasiado esfuerzo, se opta por la segunda opcion, ademas,
+se esta contruyendo un motor RegExp <em>en C</em>, si los datos de entrada son
+inapropiados, lo minimo que merece el programador es un ciclo de ejecucion
+infinito.
+</p>
+</li>
+
+<li>El manejo de memoria no se realiza de forma explicita, en su lugar se acude
+a la recursividad.
+</li>
+</ul>
+
+
+<p>
+En cualquer punto podras ser capas de reforsar el codigo si asi lo
+deseas. Sin embargo te recomiendo esperar hasta que el programa realice todas
+las funciones que necesites.
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-3-4" class="outline-3">
+<h3 id="sec-3-4">La Sintaxis</h3>
+<div class="outline-text-3" id="text-3-4">
+<p>
+La version final de <code>regexp3</code> (ASCII) soporta los siguientes constructores:
+</p>
+
+<ul class="org-ul">
+<li>Alternacion <code>|</code>
+</li>
+
+<li>Agrupacion <code>()</code>. Para "capturar" la coincidencia del patron dentro de la
+la cadena de texto, se utiliza <code>&lt;&gt;</code>
+</li>
+
+<li>Los cuantificadores son
+
+<ul class="org-ul">
+<li><code>?</code> cero o una vez
+</li>
+
+<li><code>+</code> una o mas veces
+</li>
+
+<li><code>*</code> cero o mas veces
+</li>
+
+<li><code>{n}</code> <span id="math">n</span> veces
+</li>
+
+<li><code>{a,b}</code> un rango de veces
+</li>
+</ul>
+</li>
+
+<li>Los conjuntos <code>[]</code>.
+
+<ul class="org-ul">
+<li>Para negar un conjunto el primer elemento debe ser <code>^</code>
+</li>
+</ul>
+</li>
+
+<li>Lon rangos se especifican con el signo <code>-</code> y son validos fuera de un
+conjunto, el decir <code>-</code> es un signo especial para el motor. Si queremos
+despojarlo de su significado tenemos que incluirlo en un metacaracter
+<code>:-</code>.
+</li>
+
+<li>Punto <code>.</code>. Un punto dentro de un conjunto, no pierde su
+significado. Para buscar el caracter <code>.</code> debemos incluirlo en un
+metacaracter <code>:.</code>.
+</li>
+
+<li>El metacaracter se conforma de dos caracteres el signo <code>:</code> y el
+metacaracter.
+</li>
+
+<li>Los modificadores de comportamiento se aplican de forma global o local y se
+especifican con el signo <code>#</code> seguido por los modificadores.
+
+<p>
+Para modificar el comportamiento <em>global</em> de la exprecion, el modificador
+se coloca al inicio de la exprecion antes de cualquier constructor.
+</p>
+
+<p>
+Para modificar el comportamiento de un constructor en especifico <code>#</code> se
+coloca al final del constructor. Si se aplica un cuantificador al
+constructor, el modificador debe especificarse despues de este.
+</p>
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-3-5" class="outline-3">
+<h3 id="sec-3-5">El algoritmo</h3>
+<div class="outline-text-3" id="text-3-5">
+</div><div id="outline-container-sec-3-5-1" class="outline-4">
+<h4 id="sec-3-5-1">Como interpretar la regexp</h4>
+<div class="outline-text-4" id="text-3-5-1">
+<p>
+Una expresion regular es una serie de instrucciones detalladas no ambiguas,
+que describen un patron de busqueda a un interprete (motor) de expresiones
+regulares.
+</p>
+
+<p>
+El patron de la regexp sigue una <i>sintaxis</i> donde la unidad fundamental se
+llama constructor. Estas unidades cual si fuesen bloques de construccion
+pueden conbinarse y agruparse para formar un patron de busqueda mas complejo
+segun las reglas y posicion de cada constructor.
+</p>
+
+<p>
+En principio, un motor regexp solo necesita dos datos de entrada: la regexp
+y una cadena de texto sobre la cual efectuar la busqueda del patron.
+</p>
+
+<p>
+Una vez el motor tiene estos dos datos, debe <em>optener</em> el primer
+constructor de la regexp y comparar todas sus combinaciones posibles en la
+cadena, tomando como posicion de referencia el primer caracter de la cadena.
+</p>
+
+<p>
+Si todas las combinaciones fallan, el motor mueve la posicion de referencia
+al segundo caracter de la cadena y de nuevo prueba todas las combinaciones
+del primer constructor. Si el primer constructor coincide con la cadena el
+motor avanza atraves de regexp y cadena, optiene el siguiente constructor y
+lo compara con la nueva posicion de la cadena. Si el constructor no
+coincide, el motor vuelve al ultimo recorrido completo e intenta (si existe)
+una combinacion diferente. De lo contrario, intentara nuevamente con el
+primer constructor en la siguiente posicion de la cadena.
+</p>
+
+<p>
+Si se llega al final de la cadena sin antes agotar los constructores
+signica que el patron de busqueda no esta precente.
+</p>
+
+<p>
+Si se agotan los contructores el motor informara que existe una
+coincidencia.
+</p>
+
+<p>
+Es importante resaltar que el avance tanto en la exprecion como en la cadena
+se realiza de izquierda a derecha. Esto proboca que el motor regrese la
+coincidencia en la cadena mas a la izquierda de la combinacion de
+constructores en la regexp mas a la izquierda.
+</p>
+
+<p>
+Resumiento los puntos claves de los parrafos anteriores:
+</p>
+
+<ol class="org-ol">
+<li>Se analiza el texto y la regexp de izquierda a derecha.
+</li>
+
+<li>Se optiene el primer constructor de la regexp y se prueban todas sus
+combinaciones en la posicion actual de la cadena.
+</li>
+
+<li>Si el patron del constructor coincide con la cadena se avanza atraves de
+regexp y cadena.
+</li>
+
+<li>Si el patron del constructor no se encuenta en la cadena, el motor vuelve
+al ultimo recorrido completo e intenta otra ruta.
+</li>
+
+<li>Si no hay otra ruta el motor avanza una posicion en la cadena e intenta
+con la regexp apartir del primer constructor
+</li>
+
+<li>Si se agotan los constructores tenemos una coincidencia.
+</li>
+
+<li>Si se agota la cadena no tenemos ninguna coincidencia.
+</li>
+</ol>
+
+
+<p>
+El <em>punto dos</em>, da a entender que un constructor tiene varias
+combinaciones posibles. A saber los constructores son <em>agrupacion</em>,
+<em>alternacion</em>, <em>conjunto</em>, <em>rango</em>, <em>punto</em>, <em>metacaracter</em> y
+<em>caracter</em>. Analicemos cada constructor.
+</p>
+
+<p>
+Una <em>agrupacion</em> contiene un numero indeterminado de combinaciones
+posibles, ya que puede <span id="quotation-marks">agrupar</span> a cualquier otro constructor, incluso
+otras agrupaciones.
+</p>
+
+<p>
+Una <em>alternacion</em> permite recorrer multiples <em>rutas</em> de ejecucion hasta
+que alguna coincida, cada una de estas "rutas" puede estar formada por
+expreciones de complejidad arbitraria.
+</p>
+
+<p>
+Los <em>conjuntos</em> solo pueden contener <em>rangos</em>, <em>metacaracteres</em> y
+<code>caracteres</code>.
+</p>
+
+<p>
+<em>caracteres</em>, <em>metacaracteres</em> y <em>punto</em> no pueden contener a ningun
+otro constructor.
+</p>
+
+<p>
+El <em>caracter</em> solo tiene una combinacion posible, el mismo. El <em>punto</em>
+puede coincidir con cualquier caracter. Un <em>conjunto</em> puede coincidir con
+un caracter que este dentro de su conjunto de elementos y la coincidencia de
+un <em>metacaracter</em> depende de la implementacion de cada motor.
+</p>
+
+<p>
+La conclusion es: si el constructor es distinto de <em>caracter</em> tendremos
+que probar todas sus posibles combinaciones.
+</p>
+
+<p>
+El <em>tercer punto</em> dice que el motor avanza atravez de regexp y cadena, es
+decir, si el constructor coincide con <span id="math">n</span> caracteres de la cadena, el
+siguiente constructor se compara <span id="math">n</span> caracteres despues de la comparacion
+anterior.
+</p>
+
+<p>
+Imaginemos que tenemos un ciclo de busqueda donde los constructores y la
+cadena se corresponden correctamente:
+</p>
+
+<pre class="example">cadena      0123456789:;&lt;=&gt;?@ABCDEFGHIJKLMNOPQ...
+            ▲       ▲▲     ▲▲         ▲▲     ▲
+            │Α     Ω││Α   Ω││Α       Ω││Α   Ω│
+constructor [ cons1 ][cons2][  cons3  ][cons4]...</pre>
+
+<p>
+<code>Α</code> (Alfa) señala el punto inicial de la cadena donde se compara el
+constructor y <code>Ω</code> (Omega) señala los <span id="math">n</span> caracteres que abarca la
+(posible) coincidencia.
+</p>
+
+<p>
+Puede observarse, que cada constructor es independiente uno de otro, es el
+motor quien se encarga de coordinar la posicion de la cadena donde se
+compara un constructor en especifico. El recorrido atravez de ambos, como
+indica el <em>punto uno</em> siempre se realiza de izquierda a derecha.
+</p>
+
+<p>
+El <em>punto cuatro</em> dice que si la comparacion falla, el motor vuelve al
+ultimo recorrido completo e intenta <em>otra ruta</em>. Esto da a entender que el
+motor lleva un registro de la posicion en la cadena y el numero de
+constructor que se utiliza para cada comparacion e incluso que el motor debe
+conocer la existencia de distintas rutas de ejecucion. Veamos detenidamente
+este punto.
+</p>
+
+<p>
+Si tenemos una serie de constructores de tipo caracter y la coincidencia del
+ultimo constructor falla (<code>x</code> != <code>5</code>)
+</p>
+
+<pre class="example">cadena      0123456789:;&lt;=&gt;?@ABCDEFGHIJKLMNOPQ...
+            ▲▲▲▲▲△
+            ││││││
+constructor 01234x6789</pre>
+
+<p>
+cual seria la ultima ruta de ejecucion completa? Correcto, niguna. En esta
+exprecion (<code>01234x6789</code>) regresar al constructor anterior <code>4</code> (la ultima
+ruta completa) no tiene sentido, pues para completar la ruta el constructor
+tipo caracter <code>x</code> ha de coincidir, es decir, no existe otra ruta de
+ejecucion posible.
+</p>
+
+<p>
+Veamos otro caso:
+</p>
+
+<pre class="example">cadena      0123x56789:;&lt;=&gt;?@ABCDEFGHIJKLMNOPQ...
+            ▲▲▲▲△
+            │││││
+constructor 0││3│
+             ││ │
+             ││[456789]
+            (12)</pre>
+
+<p>
+la regexp es <code>0(12)[456789]</code>, ¿cual seria la ultima ruta de ejecucion
+completa? Correcto, niguna. Al igual que la exprecion anterior solo existe
+<em>una ruta</em> de ejecucion&#x2026; porque? un conjunto contiene multiples
+elementos posibles de coincidencia, no multiples rutas de ejecucion. Si
+ninguno de sus elementos coincide no hay un punto al cual regresar, esto
+mismo aplica a las agrupaciones.
+</p>
+
+<p>
+Entoces? el unico constructor que permite multiples rutas de ejecucion es la
+<em>alternacion</em>.
+</p>
+
+<p>
+Cuando el motor "ve" una exprecion del tipo <code>1234x|12345</code>, se dice a si
+mismo: uh, tengo un par de rutas <code>1234x</code> y <code>12345</code>, debo almacerar la
+posicion inicial e intertar con la primer ruta, si esta falla restaurar la
+posicion inicial e intentar con la segunda ruta..
+</p>
+
+<p>
+la primer ruta de ejecucion sera
+</p>
+
+<pre class="example">cadena      0123456789:;&lt;=&gt;?@ABCDEFGHIJKLMNOPQ...
+            ▲▲▲▲▲△
+            ││││││
+constructor 01234x</pre>
+
+<p>
+el patron falla al comparar el quinto constructor caracter (dentro del
+constructor alternacion). Luego el motor prueba con la segunda ruta de
+ejecucion
+</p>
+
+<pre class="example">cadena      0123456789:;&lt;=&gt;?@ABCDEFGHIJKLMNOPQ...
+            ▲▲▲▲▲▲
+            ││││││
+constructor 012345</pre>
+
+<p>
+en esta ocacion, todos los constructores miembro del constructor alternacion
+coinciden, luego entonces, al no existir mas constructores en la exprecion
+<code>1234x|12345</code> el motor informa la coincidecia.
+</p>
+
+<p>
+Esto implica que el motor optiene los constructores de la exprecion
+<code>1234x|12345</code> de la siguiente forma
+</p>
+
+<pre class="example">regexp          "1234x|12345"
+
+constructor:     1234x|12345       tipo: alternacion
+almacenar posicion de inicio
+
+generar          RUTA1 y comparar con la posicion de inicio
+constructor:     1                 tipo: caracter
+constructor:      2                tipo: caracter
+constructor:       3               tipo: caracter
+constructor:        4              tipo: caracter
+constructor:         x             tipo: caracter
+
+si la primer ruta falla
+generar                RUTA2 y comparar con la posicion de inicio
+constructor:           1           tipo: caracter
+constructor:            2          tipo: caracter
+constructor:             3         tipo: caracter
+constructor:              4        tipo: caracter
+constructor:               5       tipo: caracter</pre>
+
+<p>
+(º-°)ง un momento, dices que la exprecion
+</p>
+
+<pre class="src"><code class="src src-c"><span class="src-string">"abc"</span></code></pre>
+
+<p>
+para el motor es (la C es por "constructror")
+</p>
+
+<pre class="example">[C-caracter][C-caracter][C-caracter]</pre>
+
+<p>
+que
+</p>
+
+<pre class="src"><code class="src src-c"><span class="src-string">"a[bcdefghi]c"</span></code></pre>
+
+<p>
+para el motor es
+</p>
+
+<pre class="example">[C-caracter][C-conjunto][C-caracter]</pre>
+
+<p>
+que
+</p>
+
+<pre class="src"><code class="src src-c"><span class="src-string">"(a[bcdefghi])c"</span></code></pre>
+
+<p>
+es
+</p>
+
+<pre class="example">[C-agrupacion][C-caracter]</pre>
+
+<p>
+y que
+</p>
+
+<pre class="src"><code class="src src-c"><span class="src-string">"(a[12345]|c[12345])|e"</span></code></pre>
+
+<p>
+es
+</p>
+
+<pre class="example">[C-alternacion]</pre>
+
+<p>
+Eso es correcto! El motor debe identificar los constructores <em>de primer
+nivel</em> (por llamarlos de algun modo) y luego, si es el caso optener
+constructores apartir de estos.
+</p>
+
+<p>
+Ademas, se debe tener en cuenta que siempre existe almenos una ruta de
+ejecucion, <em>la regexp en si</em>. Solo cuando existe una alternacion en el
+primer nivel habra mas de una ruta de ejecucion &#x2026; y, el motor solo ve las
+alternaciones cuando se encuentran en el primer nivel, en decir, no estan
+dentro de una agrupacion. Por tanto la primer accion del motor es comprobar
+si existe mas de una ruta de ejecucion o lo que es lo mismo, averiguar si el
+primer constructor es una alternacion.
+</p>
+
+<p>
+(º-°)ง espera, como se puede coordinar el avance entre los constructores de
+primer nivel y sus componentes, si los tienen? Sencillo, los constructores
+miembro desconocen el nivel al que pertenecen, el motor realiza una nueva
+busqueda con los constructores miembros a partir de un punto concreto en la
+cadena como si fuesen una exprecion autonoma, si hay una coincidencia el
+motor informa el resultado y su longitud a quien solicite la
+consulta. Veremos este mecanismo en la codificacion del motor.
+</p>
+
+<p>
+(º-°)ง cuando se realiza este proceso? cuando el constructor es de tipo
+agrupacion o alternacion, puesto que en ambos casos estos constructores
+pueden contener expresiones formadas por cualquier tipo y cantidad de
+constructores.
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-3-5-2" class="outline-4">
+<h4 id="sec-3-5-2">Pseudocodigo</h4>
+<div class="outline-text-4" id="text-3-5-2">
+<pre class="example">El motor recibe la regexp y la cadena de caracteres
+
+Un bucle recorre la cadena de izquierda a derecha, un caracter a la vez.
+
+| Realizamos una busqueda del patron en la posicion actual de la cadena
+|
+| Un bucle recorre la regexp de izquierda a derecha opteniendo los
+| constructores
+|
+| | Si el constructor es de tipo alternacion almacenamos la posicion de
+| | inicio en la cadena y recorremos las rutas
+| |
+| | Si el constructor es de tipo agrupacion recorremos sus constructores
+| | miembro
+| |
+| | El resto de constructores pueden buscarse directamente en la cadena
+| |
+| | | Si hay coincidencia, movemos la cadena las n posiciones que abarca
+| | | el patron
+| |
+| | | Si no hay coincidencia la ruta termina con fallo.
+| |
+| | | Si no hay mas rutas la busqueda terimina con fallo.
+|
+| Si llegamos al final del bucle hay una coincidencia</pre>
+</div>
+</div>
+
+<div id="outline-container-sec-3-5-3" class="outline-4">
+<h4 id="sec-3-5-3">Diagrama</h4>
+<div class="outline-text-4" id="text-3-5-3">
+<pre class="example">    ┌──────┐
+    │inicio│
+    └──────┘
+        │◀───────────────────────────────────┐
+        ▼                                    │
+┌────────────────┐                           │
+│bucle por cadena│                           │
+└────────────────┘                           │
+        │                                    │
+        ▼                                    │
+ ┌─────────────┐  no   ┌─────────────┐       │
+&lt;│fin de cadena│&gt;────▶&lt;│buscar regexp│&gt;──────┘
+ └─────────────┘       └─────────────┘  no coincide
+        │ si                  │ coincide
+        ▼                     ▼
+┌────────────────┐    ┌────────────────┐
+│informar: no    │    │informar:       │
+│hay coincidencia│    │hay coincidencia│
+└────────────────┘    └────────────────┘
+        │                     │
+        │◀────────────────────┘
+        ▼
+      ┌───┐
+      │fin│
+      └───┘</pre>
+
+<p>
+En esta version de <code>buscar regexp</code> todos los constructores se optienen por
+una sola funcion:
+</p>
+
+<pre class="example">                                                            ┌───────────────────────────────┐
+┏━━━━━━━━━━━━━┓                                             ▼                               │
+┃buscar regexp┃                                   ┌───────────────────┐                     │
+┗━━━━━━━━━━━━━┛                                   │Optener constructor│                     │
+                                                  └───────────────────┘                     │
+                                                            │                               │
+                                                            ▼                               │
+                                                    ┌───────────────┐  no  ┌─────────────┐  │
+                                                   &lt;│hay constructor│&gt;────▶│terminar: la │  │
+                                                    └───────────────┘      │ruta coincide│  │
+                                                            │ si           └─────────────┘  │
+                              ┌──────────┬────────┬─────────┼───────────┬──────────┐        │
+                              ▼          ▼        ▼         ▼           ▼          ▼        │
+                        ┌───────────┐┌────────┐┌─────┐┌────────────┐┌────────┐┌──────────┐  │
+                        │alternacion││conjunto││punto││metacaracter││caracter││agrupacion│  │
+                        └───────────┘└────────┘└─────┘└────────────┘└────────┘└──────────┘  │
+                              │          │        │         │           │          │        │
+                              ▼          └────────┴─────────┼───────────┘          └────────┤
+                       ┌──────────────────┐                 │                               │
+            ┌──────────│ guardar posicion │                 ▼               no              │
+            │          └──────────────────┘       ┌──────────────────┐   coincide           │
+            │          ┌──────────────────┐      &lt;│buscar constructor│&gt;─────────┐           │
+            ▼◀─────────│restaurar posicion│◀──┐   └──────────────────┘          │           │
+     ┌───────────────┐ └──────────────────┘   │             │ coincide          │           │
+     │recorrer rutas │                        │             ▼                   ▼           │
+     └───────────────┘                        │    ┌──────────────────┐ ┌────────────────┐  │
+            │                                 │    │avanzar por cadena│ │terminar, ruta  │  │
+            ▼                                 │    └──────────────────┘ │sin coincidencia│  │
+        ┌────────┐   si     ┌─────────────┐   │             │           └────────────────┘  │
+       &lt;│hay ruta│&gt;───────▶&lt;│buscar regexp│&gt;──┘             └───────────────────────────────┘
+        └────────┘          └─────────────┘ no coincide
+            │ no           coincide │
+            ▼                       ▼
+┌─────────────────────────┐ ┌─────────────┐
+│terminar sin coincidencia│ │terminar, la │
+└─────────────────────────┘ │ruta coincide│
+                            └─────────────┘</pre>
+
+<p>
+bonito diseño (funciona!), aun asi buscar el constructor <em>alternacion</em> en
+cada bucle atravez de la regexp es un desperdicio de recursos, <em>el
+constructor alternacion solo es visible (al motor) si esta fuera de
+cualquier otro constructor</em> (en la practica, eso siginifica estar fuera del
+constructor agrupacion).
+</p>
+
+<pre class="example">              ┌──────────────────┐
+              │ guardar posicion │                                 ┏━━━━━━━━━━━━━┓
+              └──────────────────┘                                 ┃buscar regexp┃
+         ┌────────────▶│                                           ┗━━━━━━━━━━━━━┛
+         │             ▼
+         │      ┌───────────────┐
+         │      │recorrer rutas │
+         │      └───────────────┘
+         │             │                         ┌─────────────────────────────────┐
+         │             ▼                         ▼                                 │
+         │         ┌────────┐   si     ┌───────────────────┐                       │
+         │        &lt;│hay ruta│&gt;────────▶│obtener constructor│                       │
+         │         └────────┘          └───────────────────┘                       │
+         │             │ no                      │                                 │
+         │             ▼                         ▼                                 │
+         │ ┌─────────────────────────┐   ┌───────────────┐  no  ┌─────────────┐    │
+         │ │terminar sin coincidencia│  &lt;│hay constructor│&gt;────▶│terminar: la │    │
+         │ └─────────────────────────┘   └───────────────┘      │ruta coincide│    │
+         │                                       │ si           └─────────────┘    │
+         │                    ┌────────┬─────────┼───────────┬──────────┐          │
+         │                    ▼        ▼         ▼           ▼          ▼          │
+┌──────────────────┐      ┌────────┐┌─────┐┌────────────┐┌────────┐┌──────────┐    │
+│restaurar posicion│      │conjunto││punto││metacaracter││caracter││agrupacion│    │
+└──────────────────┘      └────────┘└─────┘└────────────┘└────────┘└──────────┘    │
+         ▲                    │        │         │           │          │          │
+         │                    └────────┴─────────┼───────────┘          │          │
+         │                                       ▼                      ▼          │
+ ┌────────────────┐    no coincide     ┌──────────────────┐      ┌─────────────┐   │
+ │terminar: ruta  │◀────────┬─────────&lt;│buscar constructor│&gt;  ┌─&lt;│buscar regexp│&gt;  │
+ │sin coincidencia│         │          └──────────────────┘   │  └─────────────┘   │
+ └────────────────┘         │                    │ coincide   │         │          │
+                            └──────────────────┈┈│┈┈──────────┘         │ coincide │
+                                                 ▼                      │          │
+                                        ┌──────────────────┐            └──────────┤
+                                        │avanzar por cadena│                       │
+                                        └──────────────────┘                       │
+                                                 │                                 │
+                                                 └─────────────────────────────────┘</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-3-6" class="outline-3">
+<h3 id="sec-3-6">codigo</h3>
+<div class="outline-text-3" id="text-3-6">
+</div><div id="outline-container-sec-3-6-1" class="outline-4">
+<h4 id="sec-3-6-1">interfaz</h4>
+<div class="outline-text-4" id="text-3-6-1">
+<p>
+En el lenguaje de programacion C, las funciones dividen un programa extenso
+en pequeños fragmentos que realizan tareas concretas y dan la posibilidad de
+construir sobre lo que otros ya han hecho (&#x2026; eso suena a <em>sotfware
+libre</em>).
+</p>
+
+<p>
+En esencia y segun los gurus del mundo de la programacion, una buena funcion
+debe cumplir almenos estos principios
+</p>
+
+<ul class="org-ul">
+<li>debe hacer una sola cosa
+</li>
+<li>tener un nombre que describa su funcion
+</li>
+<li>no necesitar mas de tres tres argumentos, de preferencia ninguno.
+</li>
+</ul>
+
+
+<p>
+en realidad la lista es mas extensa y detallada (lo suficiente como para
+escribir un libro), almenos interare seguir estas normas en la medida de lo
+posible, que tampoco es que existan muchos ejemplos de buen gusto en lo que
+a programar en lenguaje C se refiere..
+</p>
+
+<p>
+Para cumplir el primer punto debemos preguntar ¿Que es lo que hace un motor
+regexp?
+</p>
+
+<ul class="org-ul">
+<li>Buscar la coincidencia de un patron en una cadena.
+</li>
+
+<li>Mostrar el fragmento de la cadena que corresponda al patron.
+</li>
+
+<li>Localizar todas las coincidencias de un patron.
+</li>
+
+<li>Capturar todas las coincidencias.
+</li>
+
+<li>Mostrar las coincidencias
+</li>
+
+<li>Permitir modificar las coincidencias
+</li>
+</ul>
+
+
+<p>
+Compactar todas estas tareas en una sola funcion, no es prudente (eso no
+evita que algunas implementaciones lo intenten). <em>Recursive Regexp Raptor</em>
+hereda una interfaz que ha sobrevidido sin cambio alguno durante miles de
+millones de años
+</p>
+
+<pre class="src"><code class="src src-c"><span class="src-type">unsigned</span> <span class="src-type">int</span> <span class="src-function-name">regexp3</span>( <span class="src-type">char</span> *<span class="src-variable-name">txt</span>, <span class="src-type">char</span> *<span class="src-variable-name">re</span> );</code></pre>
+
+<p>
+Lo que intenta transmitir el prototipo de funcion es:
+</p>
+
+<p>
+Hola soy un motor de expreciones regulares, me llamo <em>Recursive Regexp
+Raptor</em> pero tu puedes llamarme <code>regexp3</code>, para invocarme tienes que darme
+una regexp en forma de cadena de caracteres (argumento <code>re</code>) y una cadena
+de caracteres donde buscar el patron (argumento <code>txt</code>). Con mis
+habilidades de raptor descubrire cuantas veces se encuetra el patron en la
+cadena y te informare de esto regresando el conteo de coincidencias, si no
+hay coincidencias regreso 0 (cero).
+</p>
+
+<p>
+Podriamos decir que cumple las tres reglas
+</p>
+
+<ul class="org-ul">
+<li>Hace una cosa, contabilizar las coincidencias del patron.
+</li>
+
+<li>tiene un nombre descriptivo&#x2026; bueno el nombre no es muy explicito que
+digamos, pero almenos tiene la palabra regexp.
+</li>
+
+<li>no necesita mas de 3 parametros (<code>2 &lt; 3</code>).
+</li>
+</ul>
+
+
+<p>
+El resto de la interfaz, esta relacionado con el manejo y la manipulacion de
+capturas. Se veran a su debido tiempo segun avance el desarrollo del motor,
+por el momento nos centraremos en el metodo para optener los constructores
+de la exprecion.
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-3-6-2" class="outline-4">
+<h4 id="sec-3-6-2">constructores</h4>
+<div class="outline-text-4" id="text-3-6-2">
+<p>
+Es una lastima no poder conectarnos directamente a la maquina y transmitirle
+los algotirmos mentales de cada problema que hemos resuelto. Peor aun,
+tenemos serias deficiencias para transmitir dichas soluciones de forma
+detallada, coherente y no ambigua, que es precisamente en lo que consiste la
+programacion.
+</p>
+
+<p>
+Mientras esperamos la llegada de la <a href="https://es.wikipedia.org/wiki/Singularidad_tecnol%C3%B3gica">singularidad</a> y con la poca habilidad
+expresiva que poseeo hare lo posible para plasmar un procedimiento logico
+de codificacion&#x2026; alla vamos&#x2026;
+</p>
+
+<p>
+La regexp tiene una sintaxis bien definida que nos ayuda a identificar el
+tipo, patron y alcance de cada constructor. Una vez se ha identificado el
+constructor es necesario almacenar sus caracteristicas de forma conveniente.
+</p>
+
+<p>
+Para nuestra fortuna C nos permite manejar un grupo de variables
+relacionadas (las caracteristicas) como una unidad, en lugar de como
+entidades dispersas. Este tipo de dato compuesto por datos de tipos
+diversos, recive el nombre de estructura (<code>struct</code>)
+</p>
+
+<p>
+De momento, la estructura que almacena la informacion de nuestra regexp solo
+necita dos datos:
+</p>
+
+<ol class="org-ol">
+<li>El contenido (instruciones) del constructor.
+
+<p>
+El motor recive la regexp en formato cadena de caracteres. A medida que
+analiza la cadena debe marcar el <em>alcance</em> de cada constructor, es
+decir, el punto de inicio (<code>char *ptr</code>) y su longutid (<code>int len</code>).
+</p>
+</li>
+
+<li>Un identificador del tipo de constructor que estamos manejando (<code>enum
+TYPE type</code>)
+</li>
+</ol>
+
+<pre class="src"><code class="src src-c"><span class="src-keyword">enum</span> <span class="src-type">TYPE</span> { <span class="src-variable-name">PATH</span>, <span class="src-variable-name">GROUP</span>, <span class="src-variable-name">HOOK</span>, <span class="src-variable-name">BACKREF</span>, <span class="src-variable-name">SET</span>, <span class="src-variable-name">RANGEAB</span>, <span class="src-variable-name">META</span>, <span class="src-variable-name">POINT</span>, <span class="src-variable-name">SIMPLE</span> };
+
+<span class="src-keyword">struct</span> <span class="src-type">RE</span> {
+  <span class="src-type">char</span>     *<span class="src-variable-name">ptr</span>;
+  <span class="src-type">int</span>       <span class="src-variable-name">len</span>;
+  <span class="src-keyword">enum</span> <span class="src-type">TYPE</span> <span class="src-variable-name">type</span>;
+};</code></pre>
+
+<p>
+Cada elemento de la enumeracion <code>TYPE</code> se corresponde con un constructor:
+</p>
+
+<ul class="org-ul">
+<li><code>PATH</code> para el constructor <em>alternacion</em>.
+
+<p>
+El motor puede utilizara este identificador a modo de comodin para una
+expresion sin analizar, ya que cualquier expresion puede considerarse como
+una alternacion de una sola ruta&#x2026;
+</p>
+</li>
+
+<li><code>GROUP</code> para el constructor agrupacion
+</li>
+
+<li><code>HOOK</code>. En la mayoria de implementaciones regexp, cuando una agrupacion
+coincide con un fragmento de la cadena, el motor debe almacenar una
+referenecia a dicho fragmento. En nuestra implementacion la captura de una
+agrupacion debe indicarse explicitamente.
+
+<p>
+segun el traductor <code>HOOK</code> significa gancho y se ofrece como una opcion
+para traducir <span id="quotation-marks">captura</span> o <span id="quotation-marks">pesca</span>.
+</p>
+</li>
+
+<li><code>BACKREF</code>. <em>Backreference</em> (retroreferencia o referencia anterior)
+
+<p>
+Una vez se ha realizado la captura de una seccion de la cadena, con este
+constructor podemos solicitar la coincidencia de dicha seccion, en una
+posicicion mas adelante en la cadena
+</p>
+</li>
+
+<li><code>SET</code> para conjunto de caracteres
+</li>
+
+<li><code>RANGEAB</code> un rango de caracteres.
+
+<p>
+En realidad este no es un constructor, pero ya que un rango de caracteres
+posee una estructura especifica, hacemos uso de un idintificador a modo de
+facilidad.
+</p>
+
+<p>
+Una ventaja de esta aproximacion es permitir el uso de rangos fuera de un
+conjunto.
+</p>
+</li>
+
+<li><code>META</code> para metacaracter
+</li>
+
+<li><code>POINT</code> para punto
+</li>
+
+<li><code>SIMPLE</code> para caracter.
+
+<p>
+Dada la estructura del tipo <code>RE</code> y la naturaleza de este constructor, es
+posible tratar una secuencia de constructores caracter como una simple
+cadena de caracteres.
+</p>
+</li>
+</ul>
+
+
+<p>
+Si analizamos el <a href="#sec-3-5-3">diagrama de flujo</a>, es evidente que la complejidad del
+problema se concentra en optener los constructores mas que en el recorrido
+atraves de la cadena. Vamos a concentrarnos en ese aspecto, lo primero sera
+poder optener el constructor alternacion, los caracteres y las agrupaciones,
+en ese orden.
+</p>
+
+<p>
+Luego podremos realizar busquedas sencillas en una posicicion especifica de
+la cadena, mas tarde la busqueda se extendera por toda la longitud de la
+cadena.
+</p>
+
+<p>
+Las palabras <span id="quotation-marks">recorrido</span>, <span id="quotation-marks">ruta</span>, <span id="quotation-marks">caminar</span> o <span id="quotation-marks">segmento</span> son
+habituales cuando se explica el funcionamiento de un motor regexp. En
+nuestra implementacion Los nombres de variables y funciones adoptaran esta
+tematica simpre que sea apropiado.
+</p>
+
+<p>
+Con esto en mente y simplificando (mucho) el diagrama
+</p>
+
+<pre class="example">             ┌───────┐
+             │regexp3│
+             └───┬───┘
+                 │◀──────────────────────────────┐
+                 ▼                               │
+              ┌──────┐                           │
+              │walker│                           │
+              └──┬───┘                           │
+                 │                               │
+                 ▼                               │
+             ┌────────┐                          │
+             │trekking│                          │
+             └───┬────┘                          │
+  ┌──────┬───────┼─────┬──────┬───────┬──────┐   │
+  ▼      ▼       ▼     ▼      ▼       ▼      ▼   │
+┌───┐┌───────┐┌────┐┌─────┐┌──────┐┌─────┐┌────┐ │
+│SET││RANGEAB││META││POINT││SIMPLE││GROUP││HOOK│ │
+└───┘└───────┘└────┘└─────┘└──────┘└─────┘└────┘ │
+  └──────┴───────┼─────┴──────┘       └──────┴───┘
+                 ▼
+              ┌─────┐
+              │match│
+              └─────┘</pre>
+
+<p>
+La funcion <code>regexp3</code> es la funcion disponible al usuario. Se encargara de
+recivir, inicializar los datos, y realizar consultas de coindencia en cada
+posicion de la cadena.
+</p>
+
+<p>
+La funcion <code>walker</code> (caminante) recive la regexp, optiene y recorre cada
+ruta de ejecucion. Si alguna ruta coincide retorna verdadero, en caso
+contrario retorna falso
+</p>
+
+<p>
+La funcion <code>trekking</code> (senderista) optiene los constructores de una ruta,
+segun el tipo del constructor se realiza una consulta a <code>match</code> para
+buscar un patron directamente en la cadena, o a <code>walker</code> para generar
+nuevas subrutas de ejecucion y luego optener sus contructores.  <code>trekking</code>
+devuelve verdadero si todos los constructores coinciden, de lo contrario
+devuelve falso.
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-3-6-3" class="outline-4">
+<h4 id="sec-3-6-3">path</h4>
+<div class="outline-text-4" id="text-3-6-3">
+<pre class="src"><code class="src src-c"><span class="src-preprocessor">#include</span> <span class="src-string">&lt;stdio.h&gt;</span>
+<span class="src-preprocessor">#include</span> <span class="src-string">&lt;string.h&gt;</span>
+
+<span class="src-preprocessor">#define</span> <span class="src-variable-name">TRUE</span>  1
+<span class="src-preprocessor">#define</span> <span class="src-variable-name">FALSE</span> 0
+
+<span class="src-keyword">enum</span> <span class="src-type">TYPE</span> { <span class="src-variable-name">PATH</span>, <span class="src-variable-name">GROUP</span>, <span class="src-variable-name">HOOK</span>, <span class="src-variable-name">BACKREF</span>, <span class="src-variable-name">SET</span>, <span class="src-variable-name">RANGEAB</span>, <span class="src-variable-name">META</span>, <span class="src-variable-name">POINT</span>, <span class="src-variable-name">SIMPLE</span> };
+
+<span class="src-keyword">struct</span> <span class="src-type">RE</span> {
+  <span class="src-type">char</span>     *<span class="src-variable-name">ptr</span>;
+  <span class="src-type">int</span>       <span class="src-variable-name">len</span>;
+  <span class="src-keyword">enum</span> <span class="src-type">TYPE</span> <span class="src-variable-name">type</span>;
+};
+
+<span class="src-keyword">static</span> <span class="src-type">int</span>  <span class="src-function-name">walker</span> ( <span class="src-keyword">struct</span> <span class="src-type">RE</span>  <span class="src-variable-name">rexp</span> );
+<span class="src-keyword">static</span> <span class="src-type">int</span>  <span class="src-function-name">cutPath</span>( <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">rexp</span>, <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">track</span> );
+
+<span class="src-type">unsigned</span> <span class="src-type">int</span> <span class="src-function-name">regexp3</span>( <span class="src-type">char</span> *<span class="src-variable-name">txt</span>, <span class="src-type">char</span> *<span class="src-variable-name">re</span> ){
+  <span class="src-keyword">struct</span> <span class="src-type">RE</span>    <span class="src-variable-name">rexp</span>;
+  rexp.ptr     = re;
+  rexp.len     = strlen( re );
+  rexp.type    = PATH;
+
+  <span class="src-keyword">return</span> walker( rexp );
+}
+
+<span class="src-keyword">static</span> <span class="src-type">int</span> <span class="src-function-name">walker</span>( <span class="src-keyword">struct</span> <span class="src-type">RE</span> <span class="src-variable-name">rexp</span> ){
+  <span class="src-keyword">struct</span> <span class="src-type">RE</span> <span class="src-variable-name">track</span>;
+
+  printf( <span class="src-string">"%-20s &gt;&gt;%.*s&lt;&lt;\n"</span>, <span class="src-string">"walker INIT"</span>, rexp.len, rexp.ptr );
+  <span class="src-keyword">while</span>( cutPath( &amp;rexp, &amp;track ) )
+    printf( <span class="src-string">"%-20s &gt;&gt;%.*s&lt;&lt;\n"</span>, <span class="src-string">"walker PATH"</span>, track.len, track.ptr );
+
+  <span class="src-keyword">return</span> FALSE;
+}
+
+<span class="src-keyword">static</span> <span class="src-type">int</span> <span class="src-function-name">cutPath</span>( <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">rexp</span>, <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">track</span> ){
+  <span class="src-keyword">if</span>( rexp-&gt;len == 0 ) <span class="src-keyword">return</span> FALSE;
+
+  *track = *rexp;
+
+  <span class="src-keyword">for</span>( <span class="src-type">int</span> <span class="src-variable-name">i</span> = 0, <span class="src-variable-name">deep</span> = 0; i &lt; rexp-&gt;len; i++ ){
+    <span class="src-keyword">if</span>( rexp-&gt;ptr[ i ] ==  <span class="src-string">'('</span> )  deep++;
+    <span class="src-keyword">if</span>( rexp-&gt;ptr[ i ] ==  <span class="src-string">')'</span> )  deep--;
+    <span class="src-keyword">if</span>( rexp-&gt;ptr[ i ] ==  <span class="src-string">'|'</span> &amp;&amp; deep == 0 ){
+      track-&gt;len  = i;
+      rexp-&gt;ptr  += i + 1;
+      rexp-&gt;len  -= i + 1;
+      <span class="src-keyword">return</span> TRUE;
+    }
+  }
+
+  rexp-&gt;ptr += rexp-&gt;len;
+  rexp-&gt;len  = 0;
+
+  <span class="src-keyword">return</span> TRUE;
+}</code></pre>
+
+<p>
+Esta es la primer version de nuestro motor, la unica caracteristica que
+posee es optener las rutas de ejecucion de la exprecion que recive. Coloca
+el codigo dentro de un fichero al que deberas llamar <span id="file">regexp3.h</span>, luego
+crea un fichero de nombre <span id="file">test.c</span> y coloca lo siguiente
+</p>
+
+<pre class="src"><code class="src src-c"><span class="src-preprocessor">#include</span> <span class="src-string">"regexp3.h"</span>
+
+<span class="src-type">int</span> <span class="src-function-name">main</span>(){
+  regexp3( <span class="src-string">""</span>, <span class="src-string">"ruta1|ruta2|ruta3"</span> );
+
+  <span class="src-keyword">return</span> 0;
+}</code></pre>
+
+<p>
+en este fichero aplicaremos diversas pruebas al motor para virificar el
+correcto funcionamiento de cada caracteristica que vallamos agregando.
+</p>
+
+<p>
+Compila el codigo con el siguiete comando
+</p>
+
+<pre class="src"><code class="src src-sh">gcc -Wall test.c</code></pre>
+
+<p>
+y ejecuta la prueba con
+</p>
+
+<pre class="src"><code class="src src-sh">./a.out</code></pre>
+
+<p>
+el resultado de la exprecion <code>"ruta1|ruta2|ruta3"</code> es el siguiente
+</p>
+
+<pre class="example">walker INIT          &gt;&gt;ruta1|ruta2|ruta3&lt;&lt;
+walker PATH          &gt;&gt;ruta1&lt;&lt;
+walker PATH          &gt;&gt;ruta2&lt;&lt;
+walker PATH          &gt;&gt;ruta3&lt;&lt;</pre>
+
+<p>
+Antes de realizar nada <code>walker</code> muestra la exprecion inicial, luego,
+optiene y despliega de izquierda a derecha las rutas de ejecucion de la
+expresion.
+</p>
+
+<p>
+Vamos con la explicacion del codigo en <span id="file">regexp3.h</span>
+</p>
+
+<pre class="src"><code class="src src-c"><span class="src-preprocessor">#include</span> <span class="src-string">&lt;stdio.h&gt;</span>   <span class="src-comment-delimiter">// </span><span class="src-comment">&#10122;</span>
+<span class="src-preprocessor">#include</span> <span class="src-string">&lt;string.h&gt;</span>  <span class="src-comment-delimiter">// </span><span class="src-comment">&#10123;</span>
+
+<span class="src-preprocessor">#define</span> <span class="src-variable-name">TRUE</span>  1      <span class="src-comment-delimiter">// </span><span class="src-comment">&#10124;</span>
+<span class="src-preprocessor">#define</span> <span class="src-variable-name">FALSE</span> 0      <span class="src-comment-delimiter">// </span><span class="src-comment">&#10125;</span>
+
+<span class="src-keyword">enum</span> <span class="src-type">TYPE</span> { <span class="src-variable-name">PATH</span>, <span class="src-variable-name">GROUP</span>, <span class="src-variable-name">HOOK</span>, <span class="src-variable-name">BACKREF</span>, <span class="src-variable-name">SET</span>, <span class="src-variable-name">RANGEAB</span>, <span class="src-variable-name">META</span>, <span class="src-variable-name">POINT</span>, <span class="src-variable-name">SIMPLE</span> };  <span class="src-comment-delimiter">// </span><span class="src-comment">&#10126;</span>
+
+<span class="src-keyword">struct</span> <span class="src-type">RE</span> {          <span class="src-comment-delimiter">// </span><span class="src-comment">&#10127;</span>
+  <span class="src-type">char</span>     *<span class="src-variable-name">ptr</span>;
+  <span class="src-type">int</span>       <span class="src-variable-name">len</span>;
+  <span class="src-keyword">enum</span> <span class="src-type">TYPE</span> <span class="src-variable-name">type</span>;
+};
+
+<span class="src-keyword">static</span> <span class="src-type">int</span> <span class="src-function-name">walker</span> ( <span class="src-keyword">struct</span> <span class="src-type">RE</span>  <span class="src-variable-name">rexp</span> );                    <span class="src-comment-delimiter">// </span><span class="src-comment">&#10128;</span>
+<span class="src-keyword">static</span> <span class="src-type">int</span> <span class="src-function-name">cutPath</span>( <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">rexp</span>, <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">track</span> );  <span class="src-comment-delimiter">// </span><span class="src-comment">&#10129;</span></code></pre>
+
+<p>
+se utiliza <code>stdio</code> para mostrar la informacon ➊, <code>string</code> ➋ para
+optener la longitud de la cadena que contiene la regexp.
+</p>
+
+<p>
+C, por defecto no tiene constantes que definan verdadero o falso. Reparamos
+esta carencia mediante las constantes de macro <code>TRUE</code> ➌ (veradero) y
+<code>FALSE</code> ➍ (falso).
+</p>
+
+<p>
+Luego con la enumeracion <code>TYPE</code> generamos constantes que representan los
+diversos tipos de constructor ➎.
+</p>
+
+<p>
+La estructura <code>RE</code> ➏ sera el contenedor de los constructores.
+</p>
+
+<p>
+En C, antes de utilizar una funcion tenemos que escribir su definicion, o
+declarar un prototipo de funcion y realizar la definicion mas adelante. Se
+opta por declarar los prototipos para que la lectura del codigo fluya de
+forma descendente ➐➑ segun se van utilizando las funciones.
+</p>
+
+<pre class="src"><code class="src src-c"><span class="src-type">unsigned</span> <span class="src-type">int</span> <span class="src-function-name">regexp3</span>( <span class="src-type">char</span> *<span class="src-variable-name">txt</span>, <span class="src-type">char</span> *<span class="src-variable-name">re</span> ){
+  <span class="src-keyword">struct</span> <span class="src-type">RE</span>    <span class="src-variable-name">rexp</span>;             <span class="src-comment-delimiter">// </span><span class="src-comment">&#10122;</span>
+  rexp.ptr     = re;             <span class="src-comment-delimiter">// </span><span class="src-comment">&#10123;</span>
+  rexp.len     = strlen( re );   <span class="src-comment-delimiter">// </span><span class="src-comment">&#10124;</span>
+  rexp.type    = PATH;           <span class="src-comment-delimiter">// </span><span class="src-comment">&#10125;</span>
+
+  <span class="src-keyword">return</span> walker( rexp );         <span class="src-comment-delimiter">// </span><span class="src-comment">&#10126;</span>
+}</code></pre>
+
+<p>
+<code>regexp3</code> la funcion principal del motor, solicita una instancia de la
+estructura <code>RE</code> y apropiadamente la llama <code>rexp</code> (Regular EXPresion)
+➊.
+</p>
+
+<p>
+Inicializamos el contenedor <code>rexp</code> con los datos que contiene <code>char *re</code>:
+</p>
+
+<ol class="org-ol">
+<li>El inicio de la expresion apunta al inicio de la cadena ➋.
+</li>
+
+<li>La longitud de la expresion es la longitud de la cadena ➌.
+</li>
+
+<li>Ya que toda regexp sin importar la cantidad y tipos de constructores que
+la conforman contiene almenos una ruta de ejecucion, asignamos el tipo
+(generico) <code>PATH</code> ➍.
+</li>
+</ol>
+
+
+<p>
+La funcion termina devolviendo el valor de la consulta a <code>walker</code>, quien
+de momento se limita a recorrer, generar y mostrar las rutas de ejecucion de
+la exprecion ➎.
+</p>
+
+<p>
+Es importante resaltar que <em>ninguna funcion modifica ni la exprecion, ni
+la cadena de busqueda</em>. El recorrido, comparacion y generacion de
+constructores siempre se realiza mediante referencias a puntos en cadena y
+regexp, el unico defecto de este enfoque, es un eficiente manejo de
+recursos&#x2026; je!.
+</p>
+
+<pre class="src"><code class="src src-c"><span class="src-keyword">static</span> <span class="src-type">int</span> <span class="src-function-name">walker</span>( <span class="src-keyword">struct</span> <span class="src-type">RE</span> <span class="src-variable-name">rexp</span> ){
+  <span class="src-keyword">struct</span> <span class="src-type">RE</span> <span class="src-variable-name">track</span>;                                                      <span class="src-comment-delimiter">// </span><span class="src-comment">&#10122;</span>
+
+  printf( <span class="src-string">"%-20s &gt;&gt;%.*s&lt;&lt;\n"</span>, <span class="src-string">"walker INIT"</span>, rexp.len, rexp.ptr );      <span class="src-comment-delimiter">// </span><span class="src-comment">&#10123;</span>
+  <span class="src-keyword">while</span>( cutPath( &amp;rexp, &amp;track ) )                                     <span class="src-comment-delimiter">// </span><span class="src-comment">&#10124;</span>
+    printf( <span class="src-string">"%-20s &gt;&gt;%.*s&lt;&lt;\n"</span>, <span class="src-string">"walker PATH"</span>, track.len, track.ptr );  <span class="src-comment-delimiter">// </span><span class="src-comment">&#10125;</span>
+
+  <span class="src-keyword">return</span> FALSE;                                                         <span class="src-comment-delimiter">// </span><span class="src-comment">&#10126;</span>
+}</code></pre>
+
+<p>
+<code>walker</code> debe optener (y mas adelante buscar) las rutas de ejecucion, lo
+cual logra con un bucle <code>while</code> y la fucion <code>cutPath</code> ➌.
+</p>
+
+<p>
+En lenguaje comun, la funcion dice: tomo una regexp (<code>rexp</code>), la corto en
+secciones <code>PATH</code> (<code>cutPath</code>), una a la vez, cada seccion se almacena en
+el contenedor <code>track</code> ➊, para comprobar que el resultado es correcto se
+muestra su contenido ➍. Este ciclo continua hasta agotar la regexp
+(<code>while</code>). Si el ciclo termina sin la coincidencia de ninguna ruta, la
+regexp (como conjunto) no coincide ➎.
+</p>
+
+<p>
+La funcion auxiliar <code>cutPath</code> se encarga de cortar la ruta mas a la
+izquierda de una expresion. Si solo hay una ruta, el corte abarca la
+expresion entera.
+</p>
+
+<pre class="src"><code class="src src-c"><span class="src-keyword">static</span> <span class="src-type">int</span> <span class="src-function-name">cutPath</span>( <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">rexp</span>, <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">track</span> ){
+  <span class="src-keyword">if</span>( rexp-&gt;len == 0 ) <span class="src-keyword">return</span> FALSE;  <span class="src-comment-delimiter">// </span><span class="src-comment">&#10122;</span>
+
+  *track = *rexp;                     <span class="src-comment-delimiter">// </span><span class="src-comment">&#10123;</span>
+
+  <span class="src-keyword">for</span>( <span class="src-type">int</span> <span class="src-variable-name">i</span> = 0, <span class="src-variable-name">deep</span> = 0; i &lt; rexp-&gt;len; i++ ){  <span class="src-comment-delimiter">// </span><span class="src-comment">&#10124;</span>
+    <span class="src-keyword">if</span>( rexp-&gt;ptr[ i ] ==  <span class="src-string">'('</span> )  deep++;          <span class="src-comment-delimiter">// </span><span class="src-comment">&#10125;</span>
+    <span class="src-keyword">if</span>( rexp-&gt;ptr[ i ] ==  <span class="src-string">')'</span> )  deep--;          <span class="src-comment-delimiter">// </span><span class="src-comment">&#10126;</span>
+    <span class="src-keyword">if</span>( rexp-&gt;ptr[ i ] ==  <span class="src-string">'|'</span> &amp;&amp; deep == 0 ){     <span class="src-comment-delimiter">// </span><span class="src-comment">&#10127;</span>
+      track-&gt;len  = i;                <span class="src-comment-delimiter">// </span><span class="src-comment">&#10128;</span>
+      rexp-&gt;ptr  += i + 1;            <span class="src-comment-delimiter">// </span><span class="src-comment">&#10129;</span>
+      rexp-&gt;len  -= i + 1;            <span class="src-comment-delimiter">// </span><span class="src-comment">&#10130;</span>
+      <span class="src-keyword">return</span> TRUE;
+    }
+  }
+
+  rexp-&gt;ptr += rexp-&gt;len;             <span class="src-comment-delimiter">// </span><span class="src-comment">&#10131;</span>
+  rexp-&gt;len  = 0;                     <span class="src-comment-delimiter">// </span><span class="src-comment">&#9451;</span>
+
+  <span class="src-keyword">return</span> TRUE;
+}</code></pre>
+
+<p>
+Antes de realizar nada debemos comprobar que la regexp tiene algo que
+cortar, o dicho de otra manera, tiene una longitud mayor a cero ➊. Podemos
+configurar el codigo de 2 maneras:
+</p>
+
+<pre class="src"><code class="src src-c"><span class="src-keyword">static</span> <span class="src-type">int</span> <span class="src-function-name">cutPath</span>( <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">rexp</span>, <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">track</span> ){
+  <span class="src-keyword">if</span>( rexp-&gt;len &gt; 0 ){
+    <span class="src-comment-delimiter">// </span><span class="src-comment">acciones</span>
+    <span class="src-keyword">return</span> TRUE;
+  }
+
+  <span class="src-keyword">return</span> FALSE;
+}</code></pre>
+
+<p>
+o
+</p>
+
+<pre class="src"><code class="src src-c"><span class="src-keyword">static</span> <span class="src-type">int</span> <span class="src-function-name">cutPath</span>( <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">rexp</span>, <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">track</span> ){
+  <span class="src-keyword">if</span>( rexp-&gt;len == 0 ) <span class="src-keyword">return</span> FALSE;
+
+  <span class="src-comment-delimiter">// </span><span class="src-comment">acciones</span>
+  <span class="src-keyword">return</span> TRUE;
+}</code></pre>
+
+<p>
+ambas son validas, elijo la segunda, el codigo tiene dos lineas y un nivel
+de anidamiento menos. En cuanto a la comprobacion de la segunda opcion
+<code>==</code> y no <code>&lt;=</code>, se debe a que supongo (remarcando <em>supongo</em>) que
+<code>==</code> es mas eficiente que <code>&lt;=</code>, ademas, nunca deberia presentarse un
+caso en el cual la expresion tenga longitud negativa, o no? digo, como un
+miembro de la raza mas desarrollada de este pequeño planeta azul podria
+cometer un error al codificar algo tan sencillo&#x2026; (¬‿¬)!
+</p>
+
+<p>
+Realizamos un ciclo que recorre la exprecion en busca del operador <code>|</code> ➏,
+si se encuentra fuera de una agrupacion ➍➎ tenemos nuestra ruta. Recordemos
+que el operador <code>(</code> abre una agrupacion y <code>)</code> la cierra, a si mismo una
+agrupacion puede agrupar otras agrupaciones, es decir, existen distintos
+niveles de anidamiento o "profundidad". Nuestra funcion solo se interesa en
+las rutas de primer nivel (<code>deep == 0</code>).
+</p>
+
+<p>
+Ahora, independientemente del punto donde este (o no) el operador <code>|</code>, la
+seccion (<code>track</code>) inicia donde inicia la regexp (<code>rexp</code>), tiene la misma
+longitud (a menos que el ciclo demuestre lo contrario) y se asume que sean
+del mismo tipo (<code>PATH</code>).
+</p>
+
+<p>
+asi, en lugar de tener
+</p>
+
+<pre class="src"><code class="src src-c">track-&gt;ptr  = rexp-&gt;ptr;
+track-&gt;len  = rexp-&gt;len;
+track-&gt;type = rexp-&gt;type;</code></pre>
+
+<p>
+tenemos <code>*track = *rexp</code> ➋.
+</p>
+
+<p>
+Si encontramos el operador <code>|</code>, se modifica la longitud de la seccion ➐ a
+la vez que se "corta" de la expresion ➐➑, el <code>+ 1</code> es para descartar el
+signo <code>|</code>, pues una vez optenemos el constructor, este deja de tener
+utilidad.
+</p>
+
+<pre class="example">cutPath llamada uno
+expresion  "ruta1|ruta2|ruta3"
+seccion    "ruta1"
+retono     TRUE
+
+cutPath llamada dos
+expresion        "ruta2|ruta3"
+seccion          "ruta2"
+retono     TRUE
+
+cutPath llamada tres
+expresion              "ruta3"
+seccion                "ruta3"
+retono     TRUE
+
+cutPath llamada cuatro
+expresion                    ""
+seccion
+retono     FALSE</pre>
+
+<p>
+como muestra el ejemplo, en la tercer llamada a <code>cutPath</code>, la seccion es
+igual a la expresion. El corte deja el punto de inicio de la exprecion en la
+ultima posicion ➓ con una longitud de cero caracteres ⓫.
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-3-6-4" class="outline-4">
+<h4 id="sec-3-6-4">simple &amp; group</h4>
+</div>
+<div id="outline-container-sec-3-6-5" class="outline-4">
+<h4 id="sec-3-6-5">hook</h4>
+</div>
+<div id="outline-container-sec-3-6-6" class="outline-4">
+<h4 id="sec-3-6-6">match</h4>
+</div>
+<div id="outline-container-sec-3-6-7" class="outline-4">
+<h4 id="sec-3-6-7">loops</h4>
+</div>
+<div id="outline-container-sec-3-6-8" class="outline-4">
+<h4 id="sec-3-6-8">set &amp; meta &amp; point</h4>
+</div>
+<div id="outline-container-sec-3-6-9" class="outline-4">
+<h4 id="sec-3-6-9">mods</h4>
+</div>
+<div id="outline-container-sec-3-6-10" class="outline-4">
+<h4 id="sec-3-6-10">Catch</h4>
+</div>
+<div id="outline-container-sec-3-6-11" class="outline-4">
+<h4 id="sec-3-6-11">backreferences</h4>
+</div>
+<div id="outline-container-sec-3-6-12" class="outline-4">
+<h4 id="sec-3-6-12">Stand Alone Complex</h4>
+</div>
+</div>
+</div>
+<div id="outline-container-sec-4" class="outline-2">
+<h2 id="sec-4">Regexp3 (UTF-8)</h2>
+<div class="outline-text-2" id="text-4">
+</div><div id="outline-container-sec-4-1" class="outline-3">
+<h3 id="sec-4-1">utf-8</h3>
+</div>
+<div id="outline-container-sec-4-2" class="outline-3">
+<h3 id="sec-4-2">codigo</h3>
+</div>
+<div id="outline-container-sec-4-3" class="outline-3">
+<h3 id="sec-4-3">xx.*yy</h3>
+</div>
+</div>
+<div id="outline-container-sec-5" class="outline-2">
+<h2 id="sec-5">Regexp4</h2>
+<div class="outline-text-2" id="text-5">
+</div><div id="outline-container-sec-5-1" class="outline-3">
+<h3 id="sec-5-1">El raptor necesita un mapa</h3>
+</div>
+<div id="outline-container-sec-5-2" class="outline-3">
+<h3 id="sec-5-2">Lista de instrucciones</h3>
+</div>
+<div id="outline-container-sec-5-3" class="outline-3">
+<h3 id="sec-5-3">showTable</h3>
+</div>
+<div id="outline-container-sec-5-4" class="outline-3">
+<h3 id="sec-5-4">interprete</h3>
+</div>
+<div id="outline-container-sec-5-5" class="outline-3">
+<h3 id="sec-5-5">good by cruel regexp</h3>
+</div>
+</div>
+<div id="outline-container-sec-6" class="outline-2">
+<h2 id="sec-6">fuentes</h2>
+<div class="outline-text-2" id="text-6">
+<p>
+<a href="https://blog.staffannoteberg.com/2013/01/30/regular-expressions-a-brief-history/">https://blog.staffannoteberg.com/2013/01/30/regular-expressions-a-brief-history/</a>
+</p>
+
+<p>
+<a href="https://en.wikipedia.org/wiki/Regular_expression">https://en.wikipedia.org/wiki/Regular_expression</a>
+</p>
+
+<p>
+<a href="https://es.wikipedia.org/wiki/Expresi%C3%B3n_regular">https://es.wikipedia.org/wiki/Expresi%C3%B3n_regular</a>
+</p>
+
+<p>
+<a href="https://es.wikipedia.org/wiki/Grep">https://es.wikipedia.org/wiki/Grep</a>
+</p>
+
+<p>
+<a href="https://es.wikipedia.org/wiki/ASCII">https://es.wikipedia.org/wiki/ASCII</a>
+</p>
+
+<p>
+<a href="https://es.wikipedia.org/wiki/UTF-8">https://es.wikipedia.org/wiki/UTF-8</a>
+</p>
+
+<p>
+<a href="https://es.wikipedia.org/wiki/Byte">https://es.wikipedia.org/wiki/Byte</a>
+</p>
+
+<p>
+Mastering Regular Expressions, 2nd Edition By Jeffrey E. F. Friedl
+<a href="https://se.ifmo.ru/~ad/Documentation/Mastering_RegExp/mastregex2-CHP-4-SECT-3.html">https://se.ifmo.ru/~ad/Documentation/Mastering_RegExp/mastregex2-CHP-4-SECT-3.html</a>
+</p>
+</div>
+</div>
+</div>
+</body>
+</html>
