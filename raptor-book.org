@@ -26,7 +26,7 @@
 
   Pues bien, este libro va de construir un motor de expresiones regulares paso a
   paso, con mucho codigo y poca teoria. Nada de cerraduras de Kleene, NFA o
-  DFA. Principalmente por el autor no tiene ni idea de matematicas y su
+  DFA. Principalmente por que el autor no tiene ni idea de matematicas y su
   conocimiento se limita a un par de libros de programacion en lenguaje
   C/C++... ¯\_(ツ)_/¯
 
@@ -56,7 +56,7 @@
      regulares y su sintaxis.
 
    - [[*Regexp3 (ASCII)]] muestra como imprementar un motor de expresiones regulares
-     basado en el sitema de codificacion de caracteres @A(ASCII).
+     basado en el sistema de codificacion de caracteres @A(ASCII).
 
    - [[*Regexp3%20(UTF-8)][*Regexp3 (UTF-8)]] toma el codigo e ideas expuestas en [[*Regexp3 (ASCII)]]
      agregando algunas utilidades basicas para manejar la codificacion de
@@ -69,7 +69,7 @@
 *** otras cosas
 
     Este libro asi como todo el codigo que en el aparece esta cubierto por
-    licencias con derechos de izquierda (Copileft).
+    licencias con derechos de izquierda (Copyleft).
 
     Para el libro se utiliza la licencia GNU FDL version 1.3.
 
@@ -92,7 +92,7 @@
     el trabajo, con o sin modificaciones y de forma comercial o no comercial.
 
     Todo aquel que obtenga una copia de este material tiene derecho a conservar
-    las mimas condicines de uso, es decir, tanto el original como las versiones
+    las mismas condicines de uso, es decir, tanto el original como las versiones
     modificadas tendran la misma licencia.
 
     El codigo de este libro se encuentra alojado en
@@ -116,7 +116,7 @@
 
     @e(Si, en este libro no hay ningun acento) (y probablemente tenga una
     terrible ortografia y/o redaccion). El autor considera que la mejor forma de
-    leer cualquier documento es en formato de texto plano (detro de @e(Emacs))
+    leer cualquier documento es en formato de texto plano (dentro de @e(Emacs))
     pues permite entre otras cosas:
 
     - Preservar el material atraves de los tiempos
@@ -170,8 +170,8 @@
   @e(lenguajes regulares) utilizando su propia notacion matematica llamada
   @e(conjuntos regulares).
 
-  En 1968, @e(Ken Thompson) pionero de Unix publico el articulo «Regular
-  Expression Search Algorith» que contenia la descripcion tecnica de un
+  En 1968, @e(Ken Thompson) pionero de Unix publico el articulo @q(Regular
+  Expression Search Algorith) que contenia la descripcion tecnica de un
   compilador de expresiones regulares junto con codigo en Algol-60, mas tarde,
   implementaria por vez primera en un programa informatico el uso de expresiones
   regulares con la notacion de Kleene, especificamente en el editor de texto
@@ -515,11 +515,11 @@
    Asi que, te has decidido a leer este libro y tienes la suficiente experiencia
    como para escribir, compilar y ejecutar un programa en C.
 
-   No voy a decirte el sistema bajo el que deberias programar, ni si es mejor
-   utilizar un editor, un IDE o Emacs, tampoco cual compilador, shell o mapeo de
-   teclado sea el mas apropiado. Seguramente has elegido tus herramientas tras
-   una profunda refleccion luego evaluar todas las posibilidades y no por que
-   alguien te impuso su uso...
+   No voy a decirte el sistema bajo el que deberias programar, tampoco si es
+   mejor utilizar un editor, un IDE o Emacs, ni cual compilador, shell o mapeo
+   de teclado sea el mas apropiado. Seguramente has elegido tus herramientas
+   tras una profunda refleccion, luego evaluar todas las posibilidades y no por
+   que alguien te impuso su uso...
 
    No obstante y solamente por motivos informativos, te presento la configuracion
    que utilizo y el porque:
@@ -592,7 +592,7 @@
    rapido, Raptor, @e(Recursive Regexp Raptor), je, que creativo, no puede ser
    RE³ o lo asociaran con google, su alias sera @e(regexp3) (es mas comodo
    escribir @c(#include "regexp3") que @c(#include "RecursiveRegexpRaptor.h"),
-   ademas, dejo clara su funcion y tiene una longitud similar al de otras
+   ademas, deja clara su funcion y tiene una longitud similar al de otras
    librerias de C como @c(stdlib), @c(stdio) o @c(ctype)).
 
    Una ves desvelado el misterio demos paso a la construccion.
@@ -603,8 +603,8 @@
    la atencion en los puntos importantes. En la practica esto repercute en tres
    puntos a cosiderar:
 
-   - No se utiliza la sintaxis estadar, tampoco la que maneja Perl. En su lugar
-     se opta por la que es mas facil de programar e interpretar.
+   - No se utiliza la sintaxis regexp estadar, tampoco la que maneja Perl. En su
+     lugar se opta por la que es mas facil de programar e interpretar.
 
    - El motor asume que la expresion que resive tiene una sintaxis correcta.
 
@@ -1639,6 +1639,535 @@
     ultima posicion ➓ con una longitud de cero caracteres ⓫.
 
 *** simple & group
+
+    Al igual que en la seccion anterior el codigo se presenta al inicio. Es
+    recomendable que antes de pasar a la explicacion lo analices por tu cuenta,
+    identifiques las diferencias con la ultima version e incluso lo modifiques y
+    sigas tu propia ruta de desarrollo.
+
+    #+BEGIN_SRC c
+      #include <stdio.h>
+      #include <string.h>
+
+      #define TRUE  1
+      #define FALSE 0
+
+      enum TYPE { PATH, GROUP, HOOK, BACKREF, SET, RANGEAB, META, POINT, SIMPLE };
+
+      struct RE {
+        char     *ptr;
+        int       len;
+        enum TYPE type;
+      };
+
+      static int walker  ( struct RE  rexp );
+      static int trekking( struct RE *rexp );
+      static int cutPath ( struct RE *rexp, struct RE *track );
+      static int tracker ( struct RE *rexp, struct RE *track );
+
+      static char *strnchr( char *str, int chr, int n );
+
+      unsigned int regexp3( char *txt, char *re ){
+        struct RE    rexp;
+        rexp.ptr     = re;
+        rexp.len     = strlen( re );
+        rexp.type    = PATH;
+
+        return walker( rexp );
+      }
+
+      static int walker( struct RE rexp ){
+        struct RE track;
+
+        printf( "%-20s >>%.*s<<\n", "walker INIT", rexp.len, rexp.ptr );
+        while( cutPath( &rexp, &track ) ){
+          printf( "%-20s >>%.*s<<\n", "walker PATH", track.len, track.ptr );
+          trekking( &track );
+        }
+
+        return FALSE;
+      }
+
+      static int trekking( struct RE *rexp ){
+        struct RE track;
+
+        while( tracker( rexp, &track ) ){
+          if ( track.type == GROUP  ){
+            printf( "%-20s >>%.*s<<\n", "trekking GROUP", track.len, track.ptr );
+            walker( track );
+          } else if( track.type == SIMPLE ){
+            printf( "%-20s >>%.*s<<\n", "trekking SIMPLE", track.len, track.ptr );
+          }
+        }
+
+        return TRUE;
+      }
+
+      static int cutPath( struct RE *rexp, struct RE *track ){
+        if( rexp->len == 0 ) return FALSE;
+
+        *track = *rexp;
+
+        for( int i = 0, deep = 0; i < rexp->len; i++ ){
+          if( rexp->ptr[ i ] ==  '(' )  deep++;
+          if( rexp->ptr[ i ] ==  ')' )  deep--;
+          if( rexp->ptr[ i ] ==  '|' && deep == 0 ){
+            track->len  = i;
+            rexp->ptr  += i + 1;
+            rexp->len  -= i + 1;
+            return TRUE;
+          }
+        }
+
+        rexp->ptr += rexp->len;
+        rexp->len  = 0;
+
+        return TRUE;
+      }
+
+      static int tracker( struct RE *rexp, struct RE *track ){
+        if( rexp->len == 0 ) return FALSE;
+
+        *track = *rexp;
+
+        if( rexp->ptr[ 0 ] == '(' ){
+          for( int deep = 1, i = 1; i < rexp->len; i++ ){
+            if( rexp->ptr[ i ] ==  '(' ) deep++;
+            if( rexp->ptr[ i ] ==  ')' ) deep--;
+
+            if( deep == 0 ){
+              track->type = GROUP;
+              track->ptr++;
+              track->len  = rexp->ptr + i - track->ptr;
+              rexp->len  -= i + 1;
+              rexp->ptr  += i + 1;
+              return TRUE;
+            }
+          }
+        }
+
+        track->type = SIMPLE;
+
+        char *point;
+        if( (point = strnchr( rexp->ptr, '(', rexp->len )) )
+          track->len = point - track->ptr;
+
+        rexp->len  -= track->len;
+        rexp->ptr  += track->len;
+
+        return TRUE;
+      }
+
+      static char * strnchr( char *str, int chr, int n ){
+        for( int i = 0; i < n && str[ i ]; i++ )
+          if( str[ i ] == chr ) return str + i;
+
+        return 0;
+      }
+    #+END_SRC
+
+    compila y ejecuta la prueba nuevamente:
+
+    #+BEGIN_SRC sh
+      gcc -Wall test.c && ./a.out
+    #+END_SRC
+
+    la expresion @c("ruta1|ruta2|ruta3") produce esta salida
+
+    #+BEGIN_EXAMPLE
+      walker   INIT        >>ruta1|ruta2|ruta3<<
+      walker   PATH        >>ruta1<<
+      trekking SIMPLE      >>ruta1<<
+      walker   PATH        >>ruta2<<
+      trekking SIMPLE      >>ruta2<<
+      walker   PATH        >>ruta3<<
+      trekking SIMPLE      >>ruta3<<
+    #+END_EXAMPLE
+
+    La diferencia con la version anterior radica en que ahora somos capaces de
+    identificar cadenas de caracteres de tipo @c(SIMPLE) (uno o mas
+    constructores caracter).
+
+    Veamos el resultado de enviar una prueva con un par de agrupaciones. En el
+    fichero @f(test.c) modifica la funcion principal para que diga lo siguiente:
+
+    #+BEGIN_SRC c
+      int main(){
+        // regexp3( "", "ruta1|ruta2|ruta3" );
+        regexp3( "", "a(b|c)|A(B|C)" );
+        return 0;
+      }
+    #+END_SRC
+
+    tras compilar y realizar la prueba, obtenemos:
+
+    #+BEGIN_EXAMPLE
+      walker   init        >>a(b|c)|A(B|C)<<
+      walker   PATH        >>a(b|c)<<         ➊
+      trekking SIMPLE      >>a<<              ➋
+      trekking GROUP       >>b|c<<            ➌
+      walker   init        >>b|c<<            ➍
+      walker   PATH        >>b<<              ➎
+      trekking SIMPLE      >>b<<              ➏
+      walker   PATH        >>c<<              ➐
+      trekking SIMPLE      >>c<<              ➑
+      walker   PATH        >>A(B|C)<<         ➒
+      trekking SIMPLE      >>A<<
+      trekking GROUP       >>B|C<<
+      walker   init        >>B|C<<
+      walker   PATH        >>B<<
+      trekking SIMPLE      >>B<<
+      walker   PATH        >>C<<
+      trekking SIMPLE      >>C<<
+    #+END_EXAMPLE
+
+    lo que el motor esta haciendo es optener la primer ruta de ejecucion
+    @c[a(b|c)] ➊, luego se encuentra con el constructor @c(SIMPLE) @c(a) ➋, a
+    continuacion optiene la aprupacion @c[(b|c)] ➌ y se envia a @c(walker) ➍ que
+    optiene posibles rutas ejecucion ➎➐. Envia las rutas de la agrupacion a
+    @c(trekking) y este optiene los constructores caracter correspondientes a
+    las rutas @c(b) y @c(c) ➏➑. Esto concluye el recorrido por el primer
+    constructor de tipo ruta de @"(primer nivel), ya que el siguiente
+    constructor tiene la misma estructura @c[A(B|C)] ➒ las acciones siguen el
+    mismo orden.
+
+    Quiza la anterior explicacion no sea suficiente para visualizar el recorrido
+    atraves de la expresion, asi que aqui esta la informacion con un formato mas
+    explicito (espero):
+
+    #+BEGIN_EXAMPLE
+      walker   init        >>a(b|c)|A(B|C)<<   ┌──▶ walker inicial
+      walker   PATH        >>a(b|c)<<          ├─┬▶ walker primer ruta
+      trekking SIMPLE      >>a<<               │ ├──> primer constructor : caracter
+      trekking GROUP         >>b|c<<           │ └─┬> segundo constructor: agrupacion
+      walker   init          >>b|c<<           │   ├──▶ walker recursivo
+      walker   PATH          >>b<<             │   ├─┬▶ walker primer ruta
+      trekking SIMPLE        >>b<<             │   │ └──> primer constructor : caracter
+      walker   PATH            >>c<<           │   └─┬▶ walker segunda ruta
+      trekking SIMPLE          >>c<<           │     └──> primer constructor : caracter
+      walker   PATH               >>A(B|C)<<   └─┬▶ walker segunda ruta
+      trekking SIMPLE             >>A<<          ├──> primer constructor : caracter
+      trekking GROUP                >>B|C<<      └─┬> segundo constructor: agrupacion
+      walker   init                 >>B|C<<        ├──▶ walker recursivo
+      walker   PATH                 >>B<<          ├─┬▶ walker primer ruta
+      trekking SIMPLE               >>B<<          │ └──> primer constructor : caracter
+      walker   PATH                   >>C<<        └─┬▶ walker segunda ruta
+      trekking SIMPLE                 >>C<<          └──> primer constructor : caracter
+    #+END_EXAMPLE
+
+    apliquemos una prueba distinta
+
+    #+BEGIN_SRC c
+      int main(){
+        regexp3( "(a(b|c)|A(B|C))|1234(ea|eb|ec)" );
+
+        return 0;
+      }
+    #+END_SRC
+
+    optenemos
+
+    #+BEGIN_EXAMPLE
+      walker   init        >>(a(b|c)|A(B|C))|1234(ea|eb|ec)<<    ┌──▶ walker inicial
+      walker   PATH        >>(a(b|c)|A(B|C))<<                   ├─┬▶ walker primer ruta
+      trekking GROUP        >>a(b|c)|A(B|C)<<                    │ └─┬> primer constructor: agrupacion
+      walker   init         >>a(b|c)|A(B|C)<<                    │   ├──▶ walker recursivo
+      walker   PATH         >>a(b|c)<<                           │   ├─┬▶ walker primer ruta
+      trekking SIMPLE       >>a<<                                │   │ ├──> primer constructor : caracter
+      trekking GROUP          >>b|c<<                            │   │ └─┬> segundo constructor: agrupacion
+      walker   init           >>b|c<<                            │   │   ├──▶ walker recursivo
+      walker   PATH           >>b<<                              │   │   ├─┬▶ walker primer ruta
+      trekking SIMPLE         >>b<<                              │   │   │ └──> primer constructor : caracter
+      walker   PATH             >>c<<                            │   │   └─┬▶ walker segunda ruta
+      trekking SIMPLE           >>c<<                            │   │     └──> primer constructor : caracter
+      walker   PATH                >>A(B|C)<<                    │   └─┬▶ walker segunda ruta
+      trekking SIMPLE              >>A<<                         │     ├──> primer constructor : caracter
+      trekking GROUP                 >>B|C<<                     │     └─┬> segundo constructor: agrupacion
+      walker   init                  >>B|C<<                     │       ├──▶ walker recursivo
+      walker   PATH                  >>B<<                       │       ├─┬▶ walker primer ruta
+      trekking SIMPLE                >>B<<                       │       │ └──> primer constructor : caracter
+      walker   PATH                    >>C<<                     │       └─┬▶ walker segunda ruta
+      trekking SIMPLE                  >>C<<                     │         └──> primer constructor : caracter
+      walker   PATH                        >>1234(ea|eb|ec)<<    └─┬▶ walker segunda ruta
+      trekking SIMPLE                      >>1234<<                ├──> primer constructor : caracter
+      trekking GROUP                            >>ea|eb|ec<<       └─┬> segundo constructor: agrupacion
+      walker   init                             >>ea|eb|ec<<         ├──▶ walker recursivo
+      walker   PATH                             >>ea<<               ├─┬▶ walker primer ruta
+      trekking SIMPLE                           >>ea<<               │ └──> primer constructor : caracter
+      walker   PATH                                >>eb<<            ├─┬▶ walker segunda ruta
+      trekking SIMPLE                              >>eb<<            │ └──> primer constructor : caracter
+      walker   PATH                                   >>ec<<         └─┬▶ walker tercer ruta
+      trekking SIMPLE                                 >>ec<<           └──> primer constructor : caracter
+    #+END_EXAMPLE
+
+    @e(Magnifico), un poco de codigo y algo de recursividad parecen poder
+    reducir cualquier exprecion con tres tipos distintos de constructores:
+    rutas, agrupaciones y carateres. Ejecuta algunas pruebas mas, por ejemplo:
+
+    #+BEGIN_SRC c
+      regexp3( "", "((a(b|c)|A(B|C))|1234(ea|eb|ec))|PATH2|PATH3|(((a(b|c)|A(B|C))|1234(ea|eb|ec))|PATH4B)|PATH5" );
+    #+END_SRC
+
+    no olvides que el motor espera que la sintaxis sea correcta, especialmente
+    para las agrupaciones, los operadores de apertura y cierre @c[(] y @c[)]
+    deben estar emparejados en el orden correcto.
+
+    Sin mas demora e ignorando los nuevos prototipos de funcion, el primer
+    cambio ocurre en @c(walker)
+
+    #+BEGIN_SRC c
+      static int walker( struct RE rexp ){
+        struct RE track;
+
+        printf( "%-20s >>%.*s<<\n", "walker   INIT", rexp.len, rexp.ptr );
+        while( cutPath( &rexp, &track ) ){
+          printf( "%-20s >>%.*s<<\n", "walker   PATH", track.len, track.ptr );
+          trekking( &track );  ➊
+        }
+
+        return FALSE;
+      }
+    #+END_SRC
+
+    ahora cada ruta se envia a @c(trekking) ➊ con la mision de averiguar si la
+    ruta se encuentra o no, apartir de la posicion actual de la cadena.
+
+    #+BEGIN_SRC c
+      static int trekking( struct RE *rexp ){
+        struct RE track;
+
+        while( tracker( rexp, &track ) ){     // ➊
+          if ( track.type == GROUP  ){        // ➋
+            printf( "%-20s >>%.*s<<\n", "trekking GROUP", track.len, track.ptr );  // ➌
+            walker( track );                  // ➍
+          } else if( track.type == SIMPLE ){  // ➎
+            printf( "%-20s >>%.*s<<\n", "trekking SIMPLE", track.len, track.ptr ); // ➏
+          }
+        }
+
+        return TRUE;                          // ➐
+      }
+    #+END_SRC
+
+    @c(trekking) puede resumirse de esta forma:
+
+    1. se resive una ruta de ejecucion,
+    2. se optienen y evalunan los constructores de la ruta ➊
+    3. si todos los constructores coinciden, significa que la ruta coincide
+       @c(TRUE) ➐.
+
+    Cuando el constructor optenido es de tipo agrupacion (@c(GROUP)) ➋ lo
+    enviamos a @c(walker) ➌, pues existe la posibilidad de que la agrupacion
+    contenga un constructor tipo @c(PATH).
+
+    Cuando el constructor optenido es de tipo caracter (@c(SIMPLE)) ➎ se puede
+    evaluar directamente si coincide o no con la cadena, cosa que haremos mas
+    adelante, mientras tanto es suficiente con desplegar el contenido y tipo de
+    ambos segmentos ➍➏.
+
+    Si examinas @c(trekking), podras ver que sigue el mismo esquema que
+    @c(walker):
+
+    #+BEGIN_SRC c
+      retorno funcion( struct RE rexp ){
+        struct RE track;
+
+        while( cortarRexpAlmacetarEnTrack( &rexp, &track ){
+          // acciones
+        }
+
+        return retorno;
+      }
+    #+END_SRC
+
+    con dos pequeñas diferencias:
+
+    - En @c(trekking) la expresion coincide si todos los constructores
+      coinciden, mientras que en @c(walker) la expresion no coincide si ningun
+      constructor coincide.
+
+    - En @c(trekking) la expresion (@c(rexp)) es un puntero de la estructura
+      @c(RE), en @c(walker) la expresion es una copia.
+
+
+    Ademas, seguimos este esquema por varios y convenientes motivos:
+
+    1. Para opteren los elementos de una expresion, lo minimo necesario, es: la
+       expresion (@c(rexp)), el codigo que extraiga los elementos en orden
+       (bucle y funcion) y un contenedor para almacenar el elemento en turno
+       (@c(track)).
+
+    2. Cuando llamamos a una funcion, podemos considerar a sus parametros como
+       memoria @q(gratuita) libre de gestion, es decir, no necesitamos hacer una
+       peticion explicita de memoria, como tampoco encargarnos de su liberacion.
+
+       Este hecho es particularmente relevante cuando la solucion se implementa
+       de manera recursiva, ya que dispondremos de tantas instancias de una
+       variable como sean necesarias... mientras el hardware aguante, claro
+       esta.
+
+    3. Interpretamos la regexp como una sucesion de elementos, que contienen (o
+       no) otros elementos. Sumar esta aproximacion, al primer y segundo punto,
+       mas la forma de la funcion, es practicamente una invitacion para
+       implementar el codigo de forma recursiva.
+
+
+    (⌐□ل͜□) Desde luego, todo es tannn evidente... Nop, siendo honesto, solo lo
+    fue tras un monton de pruebas y cambios, supongo que un libro es analogo a
+    una pelicula o un album de musica, pues, detras del resultado final hay
+    mucho material descartado, solo la mejor toma ve la luz. Si encuentras este
+    material un producto de serie @e(b) o @e(z) imagina lo malo que es el
+    borrador.
+
+    Continuemos con el codigo. @c(trekking) utiliza una funcion auxiliar llamada
+    @c(tracker) para cortar el constructor mas a la izquierda de la exprecion
+    @c(rexp) y almacenarlo dentro de @c(track)
+
+    #+BEGIN_SRC c
+      static int tracker( struct RE *rexp, struct RE *track ){
+        if( rexp->len == 0 ) return FALSE;  // 🅐
+
+        *track = *rexp;                     // 🅑
+
+        if( rexp->ptr[ 0 ] == '(' ){        // 🅒
+          for( int deep = 1, i = 1; i < rexp->len; i++ ){    // 🅓
+            if( rexp->ptr[ i ] ==  '(' ) deep++;
+            if( rexp->ptr[ i ] ==  ')' ) deep--;
+
+            if( deep == 0 ){                // 🅔
+              track->type = GROUP;          // 🅕
+              track->ptr++;                 // 🅖
+              track->len  = rexp->ptr + i - track->ptr;      // 🅗
+              rexp->len  -= i + 1;          // 🅘
+              rexp->ptr  += i + 1;          // 🅙
+              return TRUE;                  // 🅚
+            }
+          }
+        }
+
+        track->type = SIMPLE;               // 🅛
+
+        char *point;
+        if( (point = strnchr( rexp->ptr, '(', rexp->len )) ) // 🅜
+          track->len = point - track->ptr;  // 🅝
+
+        rexp->len  -= track->len;           // 🅞
+        rexp->ptr  += track->len;           // 🅟
+
+        return TRUE;                        // 🅠
+      }
+    #+END_SRC
+
+    La funcion inicia comprobando si aun hay algo que cortar 🅐, si no es asi
+    regresamos @c(FALSE).
+
+    Luego hacemos una copia del contenido de @c(rexp) en @c(track) 🅑. El
+    segmento a optener (en este momento) solo puede ser de tipo @c(GROUP) 🅕 o
+    @c(SIMPLE) 🅚.
+
+    En el primer caso, si la exprecion inicia con el operador @c[(] 🅒 realizamos
+    un recorrido atraves de la expresion 🅓 hasta localizar el operador de cierre
+    @c[)] correspondiente 🅔, asignamos el tipo @c(GROUP) 🅕, establecemos la
+    longitud del segmento 🅖🅗, cortamos la expresion dejando la posicion de
+    inicio luego del operador de cierre 🅘🅙 (el +1) y finalmente regeresamos
+    @c(TRUE) 🅚.
+
+    Habras notado que en 🅖 se realiza un @c(++) antes de opteren la longitud del
+    segmento, su cometido es eliminar el operador de apertura @c[(] del
+    segmento, por su parte, la operacion 🅗 tambien descarta el operador de
+    cierre @c[)].
+
+    En el segundo caso, si no no encontramos un operador de interes al inicio de
+    la expresion, significa que el constructor mas a la izquierda es de tipo
+    caracter 🅛. En esta situacion debemos averiguar la longitud del segmento 🅝,
+    es decir, realizar una busqueda atraves de la expresion intentando encontrar
+    un operador que señale el inicio de un constructor distinto 🅜. Una ves
+    establecida la longitud del segmento, esta debe restarse de la longitud de
+    la expresion 🅞🅟, finalmente regresamos @c(TRUE) 🅠.
+
+    Observa que para este caso, si no se encuentra ningun operador, el segmento
+    @c(track) tendra la misma longitud que la expresion (punto 🅑).
+
+    Por cierto, hace falta explicar la funcion @c(strnchr). La libreria estandar
+    @c(<string.h>) incluye una funcion llamada @c(strchr) su labor es localizar
+    la primer ocurrencia de un caracter dentro de una cadena de caracteres y
+    regresar un puntero con su ubicacion. No es conveniente utilizar @c(strchr)
+    puesto que necesitamos mantener un rango de busqueda limitado a los @m(n)
+    caracteres que corresponden a la longitud de nuestra expresion. Ya que en la
+    libreria estandar no hay una funcion que realice lo que desamos,
+    implementamos nuestra propia version.
+
+    Visualmente nuestro codigo (quiza) seria asi:
+
+    #+BEGIN_EXAMPLE
+      ┏━━━━━━━━━━━┓                   ▸ regexp llama a walker.
+      ┃           ┃
+      ┃  regexp3  ┃                   ▸ walker optiene las rutas y las envia a treking
+      ┃           ┃
+      ┗━━━━━━━━━━━┛                   ▸ trekking optiene los constructores
+         ┃  ▲      GROUP                - si el tipo es GROUP lo envia a walker
+         ┃  ┃  ┏━━━━━━━━━━━━┓           - si el tipo es SIMPLE no hay nada mas que hacer
+         ▼  ┃  ▼            ┃
+      ┏━━━━━━━━━━━┓   ┏━━━━━━━━━━━┓
+      ┃           ┃◀━━┃           ┃
+      ┃  walker   ┃   ┃ trekking  ┃━━▶ SIMPLE
+      ┃           ┃━━▶┃           ┃
+      ┗━━━━━━━━━━━┛   ┗━━━━━━━━━━━┛
+    #+END_EXAMPLE
+
+    ( ͡° ͜ʖ ͡°)ง? y si dentro de una agrupacion no existieran rutas seria posible
+    que @c(trekking) presindiera de la llamada a @c(walker)?
+
+    Exelente pregunta, en tal caso @c(trekking) podria hacerse cargo de optener
+    los constructores dentro de la agrupacion de forma recursiva y el resultado
+    seguiria siendo correcto, es mas si no existiese ninguna ruta @c(regexp3)
+    podria consultar directamente a @c(trekking) sin pasar por @c(walker) pero
+    tendriamos que implementar una nueva funcion, ehhmm, por ejemplo llamada
+    @c(isPath) para poder averiguar si en la expresion existen rutas o no.
+
+    Visualmente seria algo asi:
+
+    #+BEGIN_EXAMPLE
+      ┏━━━━━━━━━━━┓    ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+      ┃           ┃    ▼    ┏━━━━━━━━━━━┓  no            ┃
+      ┃  regexp3  ┃━━━━━━━━▶┃  isPath   ┃━━━━━┓          ┃
+      ┃           ┃         ┗━━━━━━━━━━━┛     ┃          ┃
+      ┗━━━━━━━━━━━┛               ┃ yes       ┃          ┃
+         ▲     ▲                  ┃           ┃          ┃
+         ┃     ┃                  ▼           ┃          ┃
+         ┃     ┃             ┏━━━━━━━━━━━┓    ▼    ┏━━━━━━━━━━━┓
+         ┃     ┃             ┃           ┃━━━━━━━━▶┃           ┃
+         ┃     ┗━━━━━━━━━━━━━┃  walker   ┃         ┃ trekking  ┃━━▶ SIMPLE
+         ┃                   ┃           ┃◀━━━┳━━━━┃           ┃
+         ┃                   ┗━━━━━━━━━━━┛    ┃    ┗━━━━━━━━━━━┛
+         ┃                                    ┃
+         ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+    #+END_EXAMPLE
+
+    @c(isPath) seria asi
+
+    #+BEGIN_SRC c
+      static int isPath( struct RE *rexp ){
+        for( int i = 0, deep = 0; i < rexp->len; i++ )
+          switch( rexp->ptr[i] ){
+          case '(': deep++; break;
+          case ')': deep--; break;
+          case '|': if( deep == 0 ) return TRUE;
+          }
+
+        return FALSE;
+      }
+    #+END_SRC
+
+    en esencia es una version reducida de la actual @c(walker). Si seguimos este
+    esquema cuando existan 2 o mas rutas tendremos que hacer una llamada
+    adicional (primero a @c(isPath) y luego a @c(walker)), sin mencionar que
+    incementaria la complejidad/cantidad de codigo para resolver un problema ya
+    rusuelto. La unica razon para seguir este esquema es generar un registro
+    eficiente del orden de evaluacion de constructores, pero eso mi estimado
+    lector, sera implementado en la ultima seccion del libro (•>•)✘ʸᵉᵃʰ
+
+
 *** hook
 *** match
 *** loops
@@ -1656,7 +2185,7 @@
 ** Lista de instrucciones
 ** showTable
 ** interprete
-** good by cruel regexp
+** goodbye cruel regexp
 * fuentes
 
   https://blog.staffannoteberg.com/2013/01/30/regular-expressions-a-brief-history/

@@ -14,6 +14,8 @@
     --FGCtcode : #bfbfff;  /* code          */
     --FGCbcode : #b3b3b3;  /* block code    */
     --FGCtcomm : #ff4500;  /* command       */
+    --FGCfile  : #eedd82;  /* file          */
+    --FGCmath  : #98fb98;  /* math          */
     --FGClink  : #00ffff;  /* link          */
     --BGClinkh : #556b2f;  /* link bg hover */
     --FGClinkh : #ffffff;  /* link fg hover */
@@ -138,6 +140,9 @@ u    { text-decoration: underline; }
 em   { color: var( --FGCemph ); font-weight: 600; }
 code { color: var( --FGCtcode ); font-family: codetext; padding: 0px 0.2em; }
 code.command { color: var( --FGCtcomm ); font-family: codetext; padding: 0px 0.2em; }
+.file { color: var( --FGCfile ); font-family: codetext; }
+.math { color: var( --FGCmath ); font-family: codetext; }
+
 
 a       { color: var( --FGClink ); text-decoration: underline; }
 a:hover { background-color: var( --BGClinkh ); color: var( --FGClinkh ); text-decoration: none; }
