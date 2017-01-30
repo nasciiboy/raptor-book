@@ -623,7 +623,7 @@
    ridiculamente eficiente, lo cual lo hace ridiculamente veloz, veloz, veloz,
    rapido, Raptor, @e(Recursive Regexp Raptor), je, que creativo, no puede ser
    RE³ o lo asociaran con google, su alias sera @e(regexp3) (es mas comodo
-   escribir @c(#include "regexp3") que @c(#include "RecursiveRegexpRaptor.h"),
+   escribir @c(#include "regexp3.h") que @c(#include "RecursiveRegexpRaptor.h"),
    ademas, deja clara su funcion y tiene una longitud similar al de otras
    librerias de C como @c(stdlib), @c(stdio) o @c(ctype)).
 
@@ -2900,8 +2900,8 @@
      123, 15 lineas menos en las que podemos implementar todo tipo de alocadas
      funcionalidades...
 
-     Antes de pasar a otra cosa, aqui tenemos la funcion nos ayuda a cortar las
-     secciones por longitud (y tipo)
+     Antes de pasar a otra cosa, aqui tenemos la funcion @c(trackByLen) que nos
+     sirve para cortar las secciones por longitud (y tipo)
 
      #+BEGIN_SRC c
        static void trackByLen( struct RE *rexp, struct RE *track, int len, int type ){
@@ -2912,14 +2912,392 @@
        }
      #+END_SRC
 
-     sencillo: copiar todo el contenido de @c(rexp) a @c(track), modificar el tipo,
-     longitud y recorren @c(rexp) @m(n) posiciones.
+     reducir su funcionamiento es sencillo: copiar todo el contenido de @c(rexp)
+     a @c(track), modificar el tipo, longitud y recorrer @c(rexp) @m(n)
+     posiciones.
 
      Como siempre verificamos que la prueba optenga el mismo resultado. En la
      siguiente seccion activaremos pruebas que no requieran ver linea a linea lo
      la informacion que sale de motor.
 
 *** match
+
+    ( ︶︿︶) ... ... ... veamos, las secciones anteriores mostraron como
+    optener algunos constructores de la regexp, uno a uno de forma consecutiva y
+    de izquierda a derecha. Segun el algoritmo debemos comparar la posicion de
+    inicio de la cadena con el primer constructor, si hay coincidencia avanzar
+    atraves de ambos y repetir esta accion hasta agotar los constructores, la
+    cadena o dejar de encontrar coincidencias. De estas tres opciones derivamos
+    tres acciones:
+
+    - Si agotamos los constructores, la regexp coincide
+
+    - Si agotamos la cadena, la regexp no coincide
+
+    - Si no hay coincidencia, probamos con otra ruta. Si no hay otra ruta
+      iniciamos de nuevo en la siguiente posicion de la cadena
+
+
+    Necesario es que el motor pueda @"(caminara) atraves de la cadena, es decir,
+    avanzar en caso de coincidecia, retroceder en el caso contrario y continuar
+    la busqueda en la siguiente posicion de la cadena. Podemos implementar todo
+    lo anterior mediante aritmetica de punteros... o crear una estructura que
+    almacene la posicion de inicio (un puntero), la posicion actual (el
+    recorrido del motor) y la longitud de nuestra cadena:
+
+    #+BEGIN_SRC c
+      struct TEXT {
+        char *ptr;
+        int   pos;
+        int   len;
+      };
+    #+END_SRC
+
+    Al Dialogo |⌐■_■|=>
+
+    Sin importar de cuanta recurisividad haga uso el motor, este siempre opera
+    de forma secuencial, primero entre rutas y luego entre los demas
+    constructores, como pues, ha de gestionarse la optencion de constructores?
+
+    (ﾟヮﾟ)=> realizando comparaciones con el contenido de la cadena. Si el
+    constructor de turno no coincide la optecion termina e intentamos con otra
+    ruta, si no hay mas rutas la busqueda falla.
+
+    De los tres constructores que podemos optener (alternacion, agrupacion y
+    caracteres) cual se puede comparar con la cadena?
+
+    (ﾟヮﾟ)=> Los constructores alternacion y agrupacion, son indicadores para el
+    motor sobre el orden de evaluacion, por si mismos no contienen ningun patron
+    a localizar en la cadena. La cadena esta compuesta por valores concretos, de
+    momento el unico constructor que contiene este tipo de informacion son los
+    caracteres o cadenas de caracteres.
+
+    Oh, asi que la comparacion ocurre hasta que optenemos constructores de tipo
+    caracter?
+
+    (ﾟヮﾟ)=> Si, la coordinacion ocurre al comparar estos constructores, de
+    ello depende continuar con la optecion de constructores y avanzar por la
+    cadena o abortar el recorrido por la ruta/expresion
+
+    Al Codigo |⌐■_■|=>
+
+    (Esta ocacion solo mostrare las funciones a modificar, sera tu labor
+    realizar los cambios. Comienza por agregar la estructura @c(TEXT) (y una
+    instancia global de esta, llamada @c(text)) en la posicion del codigo que
+    consideres conveniente, ya el compilador te dira si la ubicacion es correcta
+    o no.)
+
+    #+BEGIN_SRC c
+      unsigned int regexp3( char *txt, char *re ){
+        struct RE    rexp;
+        rexp.ptr     = re;
+        rexp.len     = strlen( re );
+        rexp.type    = PATH;
+        text.ptr     = txt;            // ➊
+        text.len     = strlen( txt );  // ➋
+        text.pos     = 0;              // ➌
+
+        return walker( rexp );
+      }
+    #+END_SRC
+
+    Inicializamos los valores de la instancia global de la estructura
+    @c(TEXT). El punto de inicio apunta al inicio de la cadena ➊, la longitud
+    abarca toda la cadena ➋ y la posicion inicial de comparacion con el primer
+    constructor, es el inicio de la cadena ➌.
+
+    #+BEGIN_SRC c
+      static int walker( struct RE rexp ){
+        struct RE track;
+
+        printf( "%-20s >>%.*s<<\n", "walker   INIT", rexp.len, rexp.ptr );
+        for( const int oPos = text.pos; trackByType( &rexp, &track, PATH ); text.pos = oPos ){ // ➊
+          printf( "%-20s >>%.*s<<\n", "walker   PATH", track.len, track.ptr );
+          if( trekking( &track ) ) return TRUE;  // ➋
+        }
+
+        return FALSE;                            // ➌
+      }
+    #+END_SRC
+
+    @c(walker) se encarga de recorrer las rutas de la expresion. Cuando una ruta
+    coincida debemos informar la coincidiencia regresando @c(TRUE) ➋. Cuando se
+    agoten las rutas regresamos @c(FALSE) ➌. Ahora, la busqueda atraves de las
+    rutas mueve el punto de comparacion en la cadena, por ello antes de realizar
+    ninguna busqueda almacenamos la posicion original, asi, cuando una ruta
+    falle, podemos restaurar la posicion de origen para el siguiente recorrido ➊.
+
+    Veamos el recorrido por los constructores de la ruta
+
+    #+BEGIN_SRC c
+      static int trekking( struct RE *rexp ){
+        struct RE track;
+
+        while( tracker( rexp, &track ) ){
+          switch( track.type ){
+          case GROUP:
+            printf( "%-20s >>%.*s<<\n", "trekking GROUP", track.len, track.ptr );
+            if( walker( track ) == FALSE ) return FALSE;    // ➊
+            break;
+          case HOOK :
+            printf( "%-20s >>%.*s<<\n", "trekking HOOK", track.len, track.ptr );
+            if( walker( track ) == FALSE ) return FALSE;    // ➋
+            break;
+          default   :
+            printf( "%-20s >>%.*s<<\n", "trekking SIMPLE", track.len, track.ptr );
+            if( text.pos < text.len && match( &track ) )    // ➌
+              text.pos += track.len;                        // ➍
+            else return FALSE;                              // ➎
+          }
+        }
+
+        return TRUE;
+      }
+    #+END_SRC
+
+    La ruta es su cojunto genera una coincidencia, solo si se agotan los
+    constructores que la conforman. Si uno solo de sus constructores no esta
+    presente dentro de la cadena, el recorrido falla ➊➋➎.
+
+    Vamos al caso mas sencillo, el constructor caracter (@c(SIMPLE)) agrupado en
+    @c(default).
+
+    Tenemos una evaluacion con dos evaluaciones booleanas ➌, primero, antes de
+    realizar la busqueda, la posicion en la cadena tiene que ser menor a su
+    longitud, es decir, la cadena no ha llegado al final. Segundo la busqueda
+    debe regresar un valor distinto de cero (el numero de caracteres de la
+    coincidencia).
+
+    El motor ya coordina el avance por la regexp, coordinar el avance en la
+    cadena para la siguiente comparacion, requiere mover la cadena las @m(n)
+    posiciones de la coincidencia, en este caso, eso es equivalente a sumar a la
+    posicion de la cadena, la longitud del constructor ➍.
+
+    En caso de que la comparacion falle terminamos el recorrido con un @c(return
+    FALSE) ➎.
+
+    Realizar la busqueda por las agrupaciones es mas sencillo, basta con una
+    consulta a @c(walker) ➊➋, yo lo llamo @e(la magia de la recursividad).
+
+    Pasemos con la funcion que da titulo a esta seccion
+
+    #+BEGIN_SRC c
+      static int match( struct RE *rexp ){
+        int result = strncmp( text.ptr + text.pos, rexp->ptr, rexp->len ) == 0 ? rexp->len : 0; // ➊
+        printf( "match    %-11s rexp[%.*s]\n"
+                "         %-11s text[%.*s]\n",
+                result ? "OK" : "FAIL", rexp->len, rexp->ptr, "", rexp->len, text.ptr + text.pos );
+        return  result; // ➋
+      }
+    #+END_SRC
+
+    @c(match) devuelve el numero de caracteres que coinciden en la posicion
+    actual de la cadena, de 0 (no hay coincidencia) a los @m(n) caracteres que
+    conforman el constructor ➊➋. El resto, es informacion para ver lo que
+    sucede.
+
+    (｀-´ﾒ) listo! Te preguntaras (o no) @c(text) la instancia de la estructura
+    @c(TEXT) debe ser global? la respuesa es no, por dos poderosas razones:
+
+    1. Una variable global es mas simple de manejar
+
+    2. De otra forma, la variable debe "habitar" dentro de la funcion
+       @c(regexp3), luego debe ser enviada por todas las funciones (por toda la
+       recursividad) hasta llegar al punto de comparacion.
+
+
+    Es posible que hayas caido en el camino... veamos si la salida de algunas
+    pruebas ayudan en tu recuperacion.
+
+    Modifica (copia o pega) lo siguiente en @f(test.c)
+
+    #+BEGIN_SRC c
+      int main(){
+        if( regexp3( "ruta3", "ruta1|ruta2|ruta3") ) puts( "(\\/)(^-^)(\\/)" );
+        else                                         puts( "t(-.-t)" );
+
+        return 0;
+      }
+    #+END_SRC
+
+    compila y ejecuta (@c(gcc -Wall test.c && ./a.out))
+
+    esta es la salida
+
+    #+BEGIN_EXAMPLE
+      walker   INIT        >>ruta1|ruta2|ruta3<<
+      walker   PATH        >>ruta1<<
+      trekking SIMPLE      >>ruta1<<
+      match    FAIL        rexp[ruta1]
+                           text[ruta3] ➊
+      walker   PATH        >>ruta2<<
+      trekking SIMPLE      >>ruta2<<
+      match    FAIL        rexp[ruta2]
+                           text[ruta3] ➋
+      walker   PATH        >>ruta3<<
+      trekking SIMPLE      >>ruta3<<
+      match    OK          rexp[ruta3]
+                           text[ruta3] ➌
+      (\/)(^-^)(\/)
+    #+END_EXAMPLE
+
+    magnifico, el motor reestablece la posicion de la ruta en cada comparacion
+    (en realidad solo se modifica en la ultima prueba)
+
+    Algo mas complejo
+
+    #+BEGIN_SRC c
+      int main(){
+        if( regexp3( "123gh", "123(ab|cd|ef|gh)") ) puts( "(\\/)(^-^)(\\/)" );
+        else                                        puts( "t(-.-t)" );
+
+        return 0;
+      }
+    #+END_SRC
+
+
+    este es el resultado (modifique la indentacion para mas claridad):
+
+    #+BEGIN_EXAMPLE
+      walker   init        >>123(ab|cd|ef|gh)<<     ┌──▶ walker inicial
+      walker   PATH        >>123(ab|cd|ef|gh)<<     └─┬▶ walker primer ruta
+      trekking SIMPLE      >>123<<                    ├─┬> primer constructor: caracter
+      match    OK       rexp[123]                     │ └──▶ comparacion
+                        text[123]                     │
+      trekking GROUP           >>ab|cd|ef|gh<<        └─┬▶ segundo constructor: agrupacion
+      walker   init            >>ab|cd|ef|gh<<          ├──▶ walker recursivo
+      walker   PATH            >>ab<<                   ├─┬▶ walker primer ruta   ➊
+      trekking SIMPLE          >>ab<<                   │ └─┬> primer constructor: caracter
+      match    FAIL         rexp[ab]                    │   └──▶ comparacion
+                            text[gh]                    │
+      walker   PATH               >>cd<<                ├─┬▶ walker segunda ruta  ➋
+      trekking SIMPLE             >>cd<<                │ └─┬> primer constructor: caracter
+      match    FAIL            rexp[cd]                 │   └──▶ comparacion
+                               text[gh]                 │
+      walker   PATH                  >>ef<<             ├─┬▶ walker tercer ruta   ➌
+      trekking SIMPLE                >>ef<<             │ └─┬> primer constructor: caracter
+      match    FAIL               rexp[ef]              │   └──▶ comparacion
+                                  text[gh]              │
+      walker   PATH                     >>gh<<          └─┬▶ walker cuarta ruta   ➍
+      trekking SIMPLE                   >>gh<<            └─┬> primer constructor: caracter
+      match    OK                    rexp[gh]               └──▶ comparacion
+                                     text[gh]
+      (\/)(^-^)(\/)
+    #+END_EXAMPLE
+
+    De nuevo el resultado es correcto. Por el registro, parece que todo funciona
+    correctamente, en especial el recorrido por las rutas ➊➋➌➍.
+
+    Para terminar esta seccion apliquemos una bateria de pruebas mas
+    completa. Modifica el contenido de @c(test.c) a esto:
+
+    #+BEGIN_SRC c
+      #include <stdio.h>
+
+      #include "regexp3.h"
+
+      int raptorTest(){
+        int result = 0;
+        int errs   = 0;
+        int total  = 0;
+
+      #define NTEST( text, re, n )                            \
+        result = regexp3( text, re );                         \
+        total++;                                              \
+        if( result != n ){                                    \
+          printf( "%s:%d Error on N-TEST >%s< >%s<\n",        \
+                  __FILE__, __LINE__, text, re );             \
+          printf( "results %d - %d expected\n", result, n );  \
+          errs++;                                             \
+        }
+
+        NTEST( "a", "a", 1 );
+        NTEST( "aa", "aa", 1 );
+        NTEST( "raptor", "raptor", 1 );
+        NTEST( "a", "(a)", 1 );
+        NTEST( "a", "<a>", 1 );
+        NTEST( "a", "((a))", 1 );
+        NTEST( "a", "<<a>>", 1 );
+        NTEST( "a", "((((((a))))))", 1 );
+        NTEST( "a", "<<<<<<a>>>>>>", 1 );
+        NTEST( "a", "b|a", 1 );
+        NTEST( "a", "c|b|a", 1 );
+        NTEST( "a", "(b|a)", 1 );
+        NTEST( "a", "(c|b|a)", 1 );
+        NTEST( "a", "(c|b)|a", 1 );
+        NTEST( "a", "((<c>|<b>)|a)", 1 );
+        NTEST( "raptor", "b|raptor", 1 );
+        NTEST( "raptor", "c|b|raptor", 1 );
+        NTEST( "raptor", "(b|raptor)", 1 );
+        NTEST( "raptor", "(c|raptor)|a", 1 );
+        NTEST( "raptor", "((<c>|<raptor>)|a)", 1 );
+        NTEST( "ab", "a(b|c)|A(B|C)", 1 );
+        NTEST( "ac", "a(b|c)|A(B|C)", 1 );
+        NTEST( "AB", "a(b|c)|A(B|C)", 1 );
+        NTEST( "AC", "a(b|c)|A(B|C)", 1 );
+        NTEST( "ab", "a<b|c>|A<B|C>", 1 );
+        NTEST( "ac", "a<b|c>|A<B|C>", 1 );
+        NTEST( "AB", "a<b|c>|A<B|C>", 1 );
+        NTEST( "AC", "a<b|c>|A<B|C>", 1 );
+        NTEST( "ab"    , "(a(b|c)|A(B|C))|1234(ea|eb|ec)", 1 );
+        NTEST( "ac"    , "(a(b|c)|A(B|C))|1234(ea|eb|ec)", 1 );
+        NTEST( "AB"    , "(a(b|c)|A(B|C))|1234(ea|eb|ec)", 1 );
+        NTEST( "AC"    , "(a(b|c)|A(B|C))|1234(ea|eb|ec)", 1 );
+        NTEST( "ab"    , "<a<b|c>|A<B|C>>|1234<ea|eb|ec>", 1 );
+        NTEST( "ac"    , "<a<b|c>|A<B|C>>|1234<ea|eb|ec>", 1 );
+        NTEST( "AB"    , "<a<b|c>|A<B|C>>|1234<ea|eb|ec>", 1 );
+        NTEST( "AC"    , "<a<b|c>|A<B|C>>|1234<ea|eb|ec>", 1 );
+        NTEST( "1234ea", "(a(b|c)|A(B|C))|1234(ea|eb|ec)", 1 );
+        NTEST( "1234eb", "(a(b|c)|A(B|C))|1234(ea|eb|ec)", 1 );
+        NTEST( "1234ec", "(a(b|c)|A(B|C))|1234(ea|eb|ec)", 1 );
+        NTEST( "1234ea", "<a<b|c>|A<B|C>>|1234<ea|eb|ec>", 1 );
+        NTEST( "1234eb", "<a<b|c>|A<B|C>>|1234<ea|eb|ec>", 1 );
+        NTEST( "1234ec", "<a<b|c>|A<B|C>>|1234<ea|eb|ec>", 1 );
+        NTEST( "abd", "a(b|c)(d|e)|A(B|C)(D|E)", 1 );
+        NTEST( "abe", "a(b|c)(d|e)|A(B|C)(D|E)", 1 );
+        NTEST( "acd", "a(b|c)(d|e)|A(B|C)(D|E)", 1 );
+        NTEST( "ace", "a(b|c)(d|e)|A(B|C)(D|E)", 1 );
+        NTEST( "ABD", "a(b|c)(d|e)|A(B|C)(D|E)", 1 );
+        NTEST( "ABE", "a(b|c)(d|e)|A(B|C)(D|E)", 1 );
+        NTEST( "ACD", "a(b|c)(d|e)|A(B|C)(D|E)", 1 );
+        NTEST( "ACE", "a(b|c)(d|e)|A(B|C)(D|E)", 1 );
+        NTEST( "raptor", "(c|r)(e|a)(p|q)(t|u)(0|o)(t|r)", 1 );
+
+        printf( "TEST %d *** ERRS %d\n\n", total, errs );
+        return !errs;
+      }
+
+      int main(){
+        if( raptorTest() ) puts( "I am the Raptor" );
+
+        return 0;
+      }
+    #+END_SRC
+
+    Compila y ejecuta, en mi sistema todas las pruebas fueron correctas.
+
+    La macro @c(NTEST), consiste en comprobar que el numero de coincidencias es
+    el esperado, de lo contrario despliega un mensaje de error, con el numero de
+    linea, el fichero, la prueba, el resultado optenido y el esperado.
+
+    Ninguna bateria de pruebas es suficiente, siempre pueden presentarse casos
+    imprevistos, por ejemplo, como reaciona el motor ante un conjunto o una ruta
+    vacia? que deberia hacer cuando la cadena o la regexp son apuntadores
+    vacios? despues de una coincidencia deberia consultarse el siguiente
+    caracter de la cadena o continuar al final de la coincidencia?
+
+    Las respuestas a estos misterios y mucho mas, en el proximo capitulo!
+
+    - PS ::
+
+      Apartir de la siguiente seccion, eliminare todos los mensajes que se
+      producen en @f(regexp3.h), son bastate molestos. Podrian suprimirse
+      colocando el codigo dentro de directivas de compilacion condicional...
+      pero cosidero que esto solo enturbia la estructura del codigo.
+
+      Una vez te familiarices con el codigo, no necesitaras mas mensajes que
+      los que se producen en las pruebas.
+
 *** loops
 *** set & meta & point
 *** mods

@@ -983,7 +983,7 @@ tendra&#x2026; el codigo es compacto, si, es tan compacto que ha de ser
 ridiculamente eficiente, lo cual lo hace ridiculamente veloz, veloz, veloz,
 rapido, Raptor, <em>Recursive Regexp Raptor</em>, je, que creativo, no puede ser
 RE³ o lo asociaran con google, su alias sera <em>regexp3</em> (es mas comodo
-escribir <code>#include "regexp3"</code> que <code>#include "RecursiveRegexpRaptor.h"</code>,
+escribir <code>#include "regexp3.h"</code> que <code>#include "RecursiveRegexpRaptor.h"</code>,
 ademas, deja clara su funcion y tiene una longitud similar al de otras
 librerias de C como <code>stdlib</code>, <code>stdio</code> o <code>ctype</code>).
 </p>
@@ -3766,8 +3766,8 @@ funcionalidades&#x2026;
 </p>
 
 <p>
-Antes de pasar a otra cosa, aqui tenemos la funcion nos ayuda a cortar las
-secciones por longitud (y tipo)
+Antes de pasar a otra cosa, aqui tenemos la funcion <code>trackByLen</code> que
+nos sirve para cortar las secciones por longitud (y tipo)
 </p>
 
 <div class="org-src-container">
@@ -3782,8 +3782,9 @@ secciones por longitud (y tipo)
 </div>
 
 <p>
-sencillo: copiar todo el contenido de <code>rexp</code> a <code>track</code>, modificar el tipo,
-longitud y recorren <code>rexp</code> <span class="math">n</span> posiciones.
+reducir su funcionamiento es sencillo: copiar todo el contenido
+de <code>rexp</code> a <code>track</code>, modificar el tipo, longitud y
+recorrer <code>rexp</code> <span class="math">n</span> posiciones.
 </p>
 
 <p>
@@ -3796,6 +3797,484 @@ la informacion que sale de motor.
 </div>
 <div id="outline-container-sec-3-6-6" class="outline-4">
 <h4 id="sec-3-6-6">match</h4>
+<div class="outline-text-4" id="text-3-6-6">
+<p>
+( ︶︿︶) &#x2026; &#x2026; &#x2026; veamos, las secciones anteriores mostraron como
+optener algunos constructores de la regexp, uno a uno de forma consecutiva y
+de izquierda a derecha. Segun el algoritmo debemos comparar la posicion de
+inicio de la cadena con el primer constructor, si hay coincidencia avanzar
+atraves de ambos y repetir esta accion hasta agotar los constructores, la
+cadena o dejar de encontrar coincidencias. De estas tres opciones derivamos
+tres acciones:
+</p>
+
+<ul class="org-ul">
+<li>Si agotamos los constructores, la regexp coincide
+</li>
+
+<li>Si agotamos la cadena, la regexp no coincide
+</li>
+
+<li>Si no hay coincidencia, probamos con otra ruta. Si no hay otra ruta
+iniciamos de nuevo en la siguiente posicion de la cadena
+</li>
+</ul>
+
+
+<p>
+Necesario es que el motor pueda <span id="quotation-marks">caminara</span> atraves de la cadena, es decir,
+avanzar en caso de coincidecia, retroceder en el caso contrario y continuar
+la busqueda en la siguiente posicion de la cadena. Podemos implementar todo
+lo anterior mediante aritmetica de punteros&#x2026; o crear una estructura que
+almacene la posicion de inicio (un puntero), la posicion actual (el
+recorrido del motor) y la longitud de nuestra cadena:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-c"><span class="src-keyword">struct</span> <span class="src-type">TEXT</span> {
+  <span class="src-type">char</span> *<span class="src-variable-name">ptr</span>;
+  <span class="src-type">int</span>   <span class="src-variable-name">pos</span>;
+  <span class="src-type">int</span>   <span class="src-variable-name">len</span>;
+};
+</pre>
+</div>
+
+<p>
+Al Dialogo |⌐■_■|=&gt;
+</p>
+
+<p>
+Sin importar de cuanta recurisividad haga uso el motor, este siempre opera
+de forma secuencial, primero entre rutas y luego entre los demas
+constructores, como pues, ha de gestionarse la optencion de constructores?
+</p>
+
+<p>
+(ﾟヮﾟ)=&gt; realizando comparaciones con el contenido de la cadena. Si el
+constructor de turno no coincide la optecion termina e intentamos con otra
+ruta, si no hay mas rutas la busqueda falla.
+</p>
+
+<p>
+De los tres constructores que podemos optener (alternacion, agrupacion y
+caracteres) cual se puede comparar con la cadena?
+</p>
+
+<p>
+(ﾟヮﾟ)=&gt; Los constructores alternacion y agrupacion, son indicadores para el
+motor sobre el orden de evaluacion, por si mismos no contienen ningun patron
+a localizar en la cadena. La cadena esta compuesta por valores concretos, de
+momento el unico constructor que contiene este tipo de informacion son los
+caracteres o cadenas de caracteres.
+</p>
+
+<p>
+Oh, asi que la comparacion ocurre hasta que optenemos constructores de tipo
+caracter?
+</p>
+
+<p>
+(ﾟヮﾟ)=&gt; Si, la coordinacion ocurre al comparar estos constructores, de
+ello depende continuar con la optecion de constructores y avanzar por la
+cadena o abortar el recorrido por la ruta/expresion
+</p>
+
+<p>
+Al Codigo |⌐■_■|=&gt;
+</p>
+
+<p>
+(Esta ocacion solo mostrare las funciones a modificar, sera tu labor
+realizar los cambios. Comienza por agregar la estructura <code>TEXT</code> (y una
+instancia global de esta, llamada <code>text</code>) en la posicion del codigo que consideres
+conveniente, ya el compilador te dira si la ubicacion es correcta o no.)
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-c"><span class="src-type">unsigned</span> <span class="src-type">int</span> <span class="src-function-name">regexp3</span>( <span class="src-type">char</span> *<span class="src-variable-name">txt</span>, <span class="src-type">char</span> *<span class="src-variable-name">re</span> ){
+  <span class="src-keyword">struct</span> <span class="src-type">RE</span>    <span class="src-variable-name">rexp</span>;
+  rexp.ptr     = re;
+  rexp.len     = strlen( re );
+  rexp.type    = PATH;
+  text.ptr     = txt;            <span class="src-comment-delimiter">// </span><span class="src-comment">&#10122;</span>
+  text.len     = strlen( txt );  <span class="src-comment-delimiter">// </span><span class="src-comment">&#10123;</span>
+  text.pos     = 0;              <span class="src-comment-delimiter">// </span><span class="src-comment">&#10124;</span>
+
+  <span class="src-keyword">return</span> walker( rexp );
+}
+</pre>
+</div>
+
+<p>
+Inicializamos los valores de la instancia global de la estructura
+<code>TEXT</code>. El punto de inicio apunta al inicio de la cadena ➊, la longitud
+abarca toda la cadena ➋ y la posicion inicial de comparacion con el primer
+constructor, es el inicio de la cadena ➌.
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-c"><span class="src-keyword">static</span> <span class="src-type">int</span> <span class="src-function-name">walker</span>( <span class="src-keyword">struct</span> <span class="src-type">RE</span> <span class="src-variable-name">rexp</span> ){
+  <span class="src-keyword">struct</span> <span class="src-type">RE</span> <span class="src-variable-name">track</span>;
+
+  printf( <span class="src-string">"%-20s &gt;&gt;%.*s&lt;&lt;\n"</span>, <span class="src-string">"walker   INIT"</span>, rexp.len, rexp.ptr );
+  <span class="src-keyword">for</span>( <span class="src-keyword">const</span> <span class="src-type">int</span> <span class="src-variable-name">oPos</span> = text.pos; trackByType( &amp;rexp, &amp;track, PATH ); text.pos = oPos ){ <span class="src-comment-delimiter">// </span><span class="src-comment">&#10122;</span>
+    printf( <span class="src-string">"%-20s &gt;&gt;%.*s&lt;&lt;\n"</span>, <span class="src-string">"walker   PATH"</span>, track.len, track.ptr );
+    <span class="src-keyword">if</span>( trekking( &amp;track ) ) <span class="src-keyword">return</span> TRUE;  <span class="src-comment-delimiter">// </span><span class="src-comment">&#10123;</span>
+  }
+
+  <span class="src-keyword">return</span> FALSE;                            <span class="src-comment-delimiter">// </span><span class="src-comment">&#10124;</span>
+}
+</pre>
+</div>
+
+<p>
+<code>walker</code> se encarga de recorrer las rutas de la expresion. Cuando una ruta
+coincida debemos informar la coincidiencia regresando <code>TRUE</code> ➋. Cuando se
+agoten las rutas regresamos <code>FALSE</code> ➌. Ahora, la busqueda atraves de las
+rutas mueve el punto de comparacion en la cadena, por ello antes de realizar
+ninguna busqueda almacenamos la posicion original, asi, cuando una ruta
+falle, podemos restaurar la posicion de origen para el siguiente recorrido ➊.
+</p>
+
+<p>
+Veamos el recorrido por los constructores de la ruta
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-c"><span class="src-keyword">static</span> <span class="src-type">int</span> <span class="src-function-name">trekking</span>( <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">rexp</span> ){
+  <span class="src-keyword">struct</span> <span class="src-type">RE</span> <span class="src-variable-name">track</span>;
+
+  <span class="src-keyword">while</span>( tracker( rexp, &amp;track ) ){
+    <span class="src-keyword">switch</span>( track.type ){
+    <span class="src-keyword">case</span> GROUP:
+      printf( <span class="src-string">"%-20s &gt;&gt;%.*s&lt;&lt;\n"</span>, <span class="src-string">"trekking GROUP"</span>, track.len, track.ptr );
+      <span class="src-keyword">if</span>( walker( track ) == FALSE ) <span class="src-keyword">return</span> FALSE;    <span class="src-comment-delimiter">// </span><span class="src-comment">&#10122;</span>
+      <span class="src-keyword">break</span>;
+    <span class="src-keyword">case</span> HOOK :
+      printf( <span class="src-string">"%-20s &gt;&gt;%.*s&lt;&lt;\n"</span>, <span class="src-string">"trekking HOOK"</span>, track.len, track.ptr );
+      <span class="src-keyword">if</span>( walker( track ) == FALSE ) <span class="src-keyword">return</span> FALSE;    <span class="src-comment-delimiter">// </span><span class="src-comment">&#10123;</span>
+      <span class="src-keyword">break</span>;
+    <span class="src-keyword">default</span>   :
+      printf( <span class="src-string">"%-20s &gt;&gt;%.*s&lt;&lt;\n"</span>, <span class="src-string">"trekking SIMPLE"</span>, track.len, track.ptr );
+      <span class="src-keyword">if</span>( text.pos &lt; text.len &amp;&amp; match( &amp;track ) )    <span class="src-comment-delimiter">// </span><span class="src-comment">&#10124;</span>
+        text.pos += track.len;                        <span class="src-comment-delimiter">// </span><span class="src-comment">&#10125;</span>
+      <span class="src-keyword">else</span> <span class="src-keyword">return</span> FALSE;                              <span class="src-comment-delimiter">// </span><span class="src-comment">&#10126;</span>
+    }
+  }
+
+  <span class="src-keyword">return</span> TRUE;
+}
+</pre>
+</div>
+
+<p>
+La ruta es su cojunto genera una coincidencia, solo si se agotan los
+constructores que la conforman. Si uno solo de sus constructores no esta
+presente dentro de la cadena, el recorrido falla ➊➋➎.
+</p>
+
+<p>
+Vamos al caso mas sencillo, el constructor caracter (<code>SIMPLE</code>) agrupado en
+<code>default</code>.
+</p>
+
+<p>
+Tenemos una evaluacion con dos evaluaciones booleanas ➌, primero, antes de
+realizar la busqueda, la posicion en la cadena tiene que ser menor a su
+longitud, es decir, la cadena no ha llegado al final. Segundo la busqueda
+debe regresar un valor distinto de cero (el numero de caracteres de la
+coincidencia).
+</p>
+
+<p>
+El motor ya coordina el avance por la regexp, coordinar el avance en la
+cadena para la siguiente comparacion, requiere mover la cadena las <span class="math">n</span>
+posiciones de la coincidencia, en este caso, eso es equivalente a sumar a la
+posicion de la cadena, la longitud del constructor ➍.
+</p>
+
+<p>
+En caso de que la comparacion falle terminamos el recorrido con un <code>return
+FALSE</code> ➎.
+</p>
+
+<p>
+Realizar la busqueda por las agrupaciones es mas sencillo, basta
+con una consulta a <code>walker</code> ➊➋, yo lo llamo <em>la magia de la
+recursividad</em>.
+</p>
+
+<p>
+Pasemos con la funcion que da titulo a esta seccion
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-c"><span class="src-keyword">static</span> <span class="src-type">int</span> <span class="src-function-name">match</span>( <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">rexp</span> ){
+  <span class="src-type">int</span> <span class="src-variable-name">result</span> = strncmp( text.ptr + text.pos, rexp-&gt;ptr, rexp-&gt;len ) == 0 ? rexp-&gt;len : 0; <span class="src-comment-delimiter">// </span><span class="src-comment">&#10122;</span>
+  printf( <span class="src-string">"match    %-11s rexp[%.*s]\n"</span>
+          <span class="src-string">"         %-11s text[%.*s]\n"</span>,
+          result ? <span class="src-string">"OK"</span> : <span class="src-string">"FAIL"</span>, rexp-&gt;len, rexp-&gt;ptr, <span class="src-string">""</span>, rexp-&gt;len, text.ptr + text.pos );
+  <span class="src-keyword">return</span>  result; <span class="src-comment-delimiter">// </span><span class="src-comment">&#10123;</span>
+}
+</pre>
+</div>
+
+<p>
+<code>match</code> devuelve el numero de caracteres que coinciden en la posicion
+actual de la cadena, de 0 (no hay coincidencia) a los <span class="math">n</span> caracteres que
+conforman el constructor ➊➋. El resto, es informacion para ver lo que sucede.
+</p>
+
+<p>
+(｀-´ﾒ) listo! Te preguntaras (o no) <code>text</code> la instancia de la estructura
+<code>TEXT</code> debe ser global? la respuesa es no, por dos poderosas razones:
+</p>
+
+<ol class="org-ol">
+<li>Una variable global es mas simple de manejar
+</li>
+
+<li>De otra forma, la variable debe "habitar" dentro de la funcion
+<code>regexp3</code>, luego debe ser enviada por todas las funciones (por toda la
+recursividad) hasta llegar al punto de comparacion.
+</li>
+</ol>
+
+
+<p>
+Es posible que hayas caido en el camino&#x2026; veamos si la salida de algunas
+pruebas ayudan en tu recuperacion.
+</p>
+
+<p>
+Modifica (copia o pega) lo siguiente en <span class="file">test.c</span>
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-c"><span class="src-type">int</span> <span class="src-function-name">main</span>(){
+  <span class="src-keyword">if</span>( regexp3( <span class="src-string">"ruta3"</span>, <span class="src-string">"ruta1|ruta2|ruta3"</span>) ) puts( <span class="src-string">"(\\/)(^-^)(\\/)"</span> );
+  <span class="src-keyword">else</span>                                         puts( <span class="src-string">"t(-.-t)"</span> );
+
+  <span class="src-keyword">return</span> 0;
+}
+</pre>
+</div>
+
+<p>
+compila y ejecuta (<code>gcc -Wall test.c &amp;&amp; ./a.out</code>)
+</p>
+
+<p>
+esta es la salida
+</p>
+
+<pre class="example">
+walker   INIT        &gt;&gt;ruta1|ruta2|ruta3&lt;&lt;
+walker   PATH        &gt;&gt;ruta1&lt;&lt;
+trekking SIMPLE      &gt;&gt;ruta1&lt;&lt;
+match    FAIL        rexp[ruta1]
+                     text[ruta3] ➊
+walker   PATH        &gt;&gt;ruta2&lt;&lt;
+trekking SIMPLE      &gt;&gt;ruta2&lt;&lt;
+match    FAIL        rexp[ruta2]
+                     text[ruta3] ➋
+walker   PATH        &gt;&gt;ruta3&lt;&lt;
+trekking SIMPLE      &gt;&gt;ruta3&lt;&lt;
+match    OK          rexp[ruta3]
+                     text[ruta3] ➌
+(\/)(^-^)(\/)
+</pre>
+
+<p>
+magnifico, el motor reestablece la posicion de la ruta en cada comparacion
+(en realidad solo se modifica en la ultima prueba)
+</p>
+
+<p>
+Algo mas complejo
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-c"><span class="src-type">int</span> <span class="src-function-name">main</span>(){
+  <span class="src-keyword">if</span>( regexp3( <span class="src-string">"123gh"</span>, <span class="src-string">"123(ab|cd|ef|gh)"</span>) ) puts( <span class="src-string">"(\\/)(^-^)(\\/)"</span> );
+  <span class="src-keyword">else</span>                                        puts( <span class="src-string">"t(-.-t)"</span> );
+
+  <span class="src-keyword">return</span> 0;
+}
+</pre>
+</div>
+
+
+<p>
+este es el resultado (modifique la indentacion para mas claridad):
+</p>
+
+<pre class="example">
+walker   init        &gt;&gt;123(ab|cd|ef|gh)&lt;&lt;     ┌──▶ walker inicial
+walker   PATH        &gt;&gt;123(ab|cd|ef|gh)&lt;&lt;     └─┬▶ walker primer ruta
+trekking SIMPLE      &gt;&gt;123&lt;&lt;                    ├─┬&gt; primer constructor: caracter
+match    OK       rexp[123]                     │ └──▶ comparacion
+                  text[123]                     │
+trekking GROUP           &gt;&gt;ab|cd|ef|gh&lt;&lt;        └─┬▶ segundo constructor: agrupacion
+walker   init            &gt;&gt;ab|cd|ef|gh&lt;&lt;          ├──▶ walker recursivo
+walker   PATH            &gt;&gt;ab&lt;&lt;                   ├─┬▶ walker primer ruta   ➊
+trekking SIMPLE          &gt;&gt;ab&lt;&lt;                   │ └─┬&gt; primer constructor: caracter
+match    FAIL         rexp[ab]                    │   └──▶ comparacion
+                      text[gh]                    │
+walker   PATH               &gt;&gt;cd&lt;&lt;                ├─┬▶ walker segunda ruta  ➋
+trekking SIMPLE             &gt;&gt;cd&lt;&lt;                │ └─┬&gt; primer constructor: caracter
+match    FAIL            rexp[cd]                 │   └──▶ comparacion
+                         text[gh]                 │
+walker   PATH                  &gt;&gt;ef&lt;&lt;             ├─┬▶ walker tercer ruta   ➌
+trekking SIMPLE                &gt;&gt;ef&lt;&lt;             │ └─┬&gt; primer constructor: caracter
+match    FAIL               rexp[ef]              │   └──▶ comparacion
+                            text[gh]              │
+walker   PATH                     &gt;&gt;gh&lt;&lt;          └─┬▶ walker cuarta ruta   ➍
+trekking SIMPLE                   &gt;&gt;gh&lt;&lt;            └─┬&gt; primer constructor: caracter
+match    OK                    rexp[gh]               └──▶ comparacion
+                               text[gh]
+(\/)(^-^)(\/)
+</pre>
+
+<p>
+De nuevo el resultado es correcto. Por el registro, parece que todo funciona
+correctamente, en especial el recorrido por las rutas ➊➋➌➍.
+</p>
+
+<p>
+Para terminar esta seccion apliquemos una bateria de pruebas mas
+completa. Modifica el contenido de <code>test.c</code> a esto:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-c"><span class="src-preprocessor">#include</span> <span class="src-string">&lt;stdio.h&gt;</span>
+
+<span class="src-preprocessor">#include</span> <span class="src-string">"regexp3.h"</span>
+
+<span class="src-type">int</span> <span class="src-function-name">raptorTest</span>(){
+  <span class="src-type">int</span> <span class="src-variable-name">result</span> = 0;
+  <span class="src-type">int</span> <span class="src-variable-name">errs</span>   = 0;
+  <span class="src-type">int</span> <span class="src-variable-name">total</span>  = 0;
+
+<span class="src-preprocessor">#define</span> <span class="src-function-name">NTEST</span>( <span class="src-variable-name">text</span>, <span class="src-variable-name">re</span>, <span class="src-variable-name">n</span> )                            \
+  result = regexp3( text, re );                         \
+  total++;                                              \
+  <span class="src-keyword">if</span>( result != n ){                                    \
+    printf( <span class="src-string">"%s:%d Error on N-TEST &gt;%s&lt; &gt;%s&lt;\n"</span>,        \
+            __FILE__, __LINE__, text, re );             \
+    printf( <span class="src-string">"results %d - %d expected\n"</span>, result, n );  \
+    errs++;                                             \
+  }
+
+  NTEST( <span class="src-string">"a"</span>, <span class="src-string">"a"</span>, 1 );
+  NTEST( <span class="src-string">"aa"</span>, <span class="src-string">"aa"</span>, 1 );
+  NTEST( <span class="src-string">"raptor"</span>, <span class="src-string">"raptor"</span>, 1 );
+  NTEST( <span class="src-string">"a"</span>, <span class="src-string">"(a)"</span>, 1 );
+  NTEST( <span class="src-string">"a"</span>, <span class="src-string">"&lt;a&gt;"</span>, 1 );
+  NTEST( <span class="src-string">"a"</span>, <span class="src-string">"((a))"</span>, 1 );
+  NTEST( <span class="src-string">"a"</span>, <span class="src-string">"&lt;&lt;a&gt;&gt;"</span>, 1 );
+  NTEST( <span class="src-string">"a"</span>, <span class="src-string">"((((((a))))))"</span>, 1 );
+  NTEST( <span class="src-string">"a"</span>, <span class="src-string">"&lt;&lt;&lt;&lt;&lt;&lt;a&gt;&gt;&gt;&gt;&gt;&gt;"</span>, 1 );
+  NTEST( <span class="src-string">"a"</span>, <span class="src-string">"b|a"</span>, 1 );
+  NTEST( <span class="src-string">"a"</span>, <span class="src-string">"c|b|a"</span>, 1 );
+  NTEST( <span class="src-string">"a"</span>, <span class="src-string">"(b|a)"</span>, 1 );
+  NTEST( <span class="src-string">"a"</span>, <span class="src-string">"(c|b|a)"</span>, 1 );
+  NTEST( <span class="src-string">"a"</span>, <span class="src-string">"(c|b)|a"</span>, 1 );
+  NTEST( <span class="src-string">"a"</span>, <span class="src-string">"((&lt;c&gt;|&lt;b&gt;)|a)"</span>, 1 );
+  NTEST( <span class="src-string">"raptor"</span>, <span class="src-string">"b|raptor"</span>, 1 );
+  NTEST( <span class="src-string">"raptor"</span>, <span class="src-string">"c|b|raptor"</span>, 1 );
+  NTEST( <span class="src-string">"raptor"</span>, <span class="src-string">"(b|raptor)"</span>, 1 );
+  NTEST( <span class="src-string">"raptor"</span>, <span class="src-string">"(c|raptor)|a"</span>, 1 );
+  NTEST( <span class="src-string">"raptor"</span>, <span class="src-string">"((&lt;c&gt;|&lt;raptor&gt;)|a)"</span>, 1 );
+  NTEST( <span class="src-string">"ab"</span>, <span class="src-string">"a(b|c)|A(B|C)"</span>, 1 );
+  NTEST( <span class="src-string">"ac"</span>, <span class="src-string">"a(b|c)|A(B|C)"</span>, 1 );
+  NTEST( <span class="src-string">"AB"</span>, <span class="src-string">"a(b|c)|A(B|C)"</span>, 1 );
+  NTEST( <span class="src-string">"AC"</span>, <span class="src-string">"a(b|c)|A(B|C)"</span>, 1 );
+  NTEST( <span class="src-string">"ab"</span>, <span class="src-string">"a&lt;b|c&gt;|A&lt;B|C&gt;"</span>, 1 );
+  NTEST( <span class="src-string">"ac"</span>, <span class="src-string">"a&lt;b|c&gt;|A&lt;B|C&gt;"</span>, 1 );
+  NTEST( <span class="src-string">"AB"</span>, <span class="src-string">"a&lt;b|c&gt;|A&lt;B|C&gt;"</span>, 1 );
+  NTEST( <span class="src-string">"AC"</span>, <span class="src-string">"a&lt;b|c&gt;|A&lt;B|C&gt;"</span>, 1 );
+  NTEST( <span class="src-string">"ab"</span>    , <span class="src-string">"(a(b|c)|A(B|C))|1234(ea|eb|ec)"</span>, 1 );
+  NTEST( <span class="src-string">"ac"</span>    , <span class="src-string">"(a(b|c)|A(B|C))|1234(ea|eb|ec)"</span>, 1 );
+  NTEST( <span class="src-string">"AB"</span>    , <span class="src-string">"(a(b|c)|A(B|C))|1234(ea|eb|ec)"</span>, 1 );
+  NTEST( <span class="src-string">"AC"</span>    , <span class="src-string">"(a(b|c)|A(B|C))|1234(ea|eb|ec)"</span>, 1 );
+  NTEST( <span class="src-string">"ab"</span>    , <span class="src-string">"&lt;a&lt;b|c&gt;|A&lt;B|C&gt;&gt;|1234&lt;ea|eb|ec&gt;"</span>, 1 );
+  NTEST( <span class="src-string">"ac"</span>    , <span class="src-string">"&lt;a&lt;b|c&gt;|A&lt;B|C&gt;&gt;|1234&lt;ea|eb|ec&gt;"</span>, 1 );
+  NTEST( <span class="src-string">"AB"</span>    , <span class="src-string">"&lt;a&lt;b|c&gt;|A&lt;B|C&gt;&gt;|1234&lt;ea|eb|ec&gt;"</span>, 1 );
+  NTEST( <span class="src-string">"AC"</span>    , <span class="src-string">"&lt;a&lt;b|c&gt;|A&lt;B|C&gt;&gt;|1234&lt;ea|eb|ec&gt;"</span>, 1 );
+  NTEST( <span class="src-string">"1234ea"</span>, <span class="src-string">"(a(b|c)|A(B|C))|1234(ea|eb|ec)"</span>, 1 );
+  NTEST( <span class="src-string">"1234eb"</span>, <span class="src-string">"(a(b|c)|A(B|C))|1234(ea|eb|ec)"</span>, 1 );
+  NTEST( <span class="src-string">"1234ec"</span>, <span class="src-string">"(a(b|c)|A(B|C))|1234(ea|eb|ec)"</span>, 1 );
+  NTEST( <span class="src-string">"1234ea"</span>, <span class="src-string">"&lt;a&lt;b|c&gt;|A&lt;B|C&gt;&gt;|1234&lt;ea|eb|ec&gt;"</span>, 1 );
+  NTEST( <span class="src-string">"1234eb"</span>, <span class="src-string">"&lt;a&lt;b|c&gt;|A&lt;B|C&gt;&gt;|1234&lt;ea|eb|ec&gt;"</span>, 1 );
+  NTEST( <span class="src-string">"1234ec"</span>, <span class="src-string">"&lt;a&lt;b|c&gt;|A&lt;B|C&gt;&gt;|1234&lt;ea|eb|ec&gt;"</span>, 1 );
+  NTEST( <span class="src-string">"abd"</span>, <span class="src-string">"a(b|c)(d|e)|A(B|C)(D|E)"</span>, 1 );
+  NTEST( <span class="src-string">"abe"</span>, <span class="src-string">"a(b|c)(d|e)|A(B|C)(D|E)"</span>, 1 );
+  NTEST( <span class="src-string">"acd"</span>, <span class="src-string">"a(b|c)(d|e)|A(B|C)(D|E)"</span>, 1 );
+  NTEST( <span class="src-string">"ace"</span>, <span class="src-string">"a(b|c)(d|e)|A(B|C)(D|E)"</span>, 1 );
+  NTEST( <span class="src-string">"ABD"</span>, <span class="src-string">"a(b|c)(d|e)|A(B|C)(D|E)"</span>, 1 );
+  NTEST( <span class="src-string">"ABE"</span>, <span class="src-string">"a(b|c)(d|e)|A(B|C)(D|E)"</span>, 1 );
+  NTEST( <span class="src-string">"ACD"</span>, <span class="src-string">"a(b|c)(d|e)|A(B|C)(D|E)"</span>, 1 );
+  NTEST( <span class="src-string">"ACE"</span>, <span class="src-string">"a(b|c)(d|e)|A(B|C)(D|E)"</span>, 1 );
+  NTEST( <span class="src-string">"raptor"</span>, <span class="src-string">"(c|r)(e|a)(p|q)(t|u)(0|o)(t|r)"</span>, 1 );
+
+  printf( <span class="src-string">"TEST %d *** ERRS %d\n\n"</span>, total, errs );
+  <span class="src-keyword">return</span> <span class="src-negation-char">!</span>errs;
+}
+
+<span class="src-type">int</span> <span class="src-function-name">main</span>(){
+  <span class="src-keyword">if</span>( raptorTest() ) puts( <span class="src-string">"I am the Raptor"</span> );
+
+  <span class="src-keyword">return</span> 0;
+}
+</pre>
+</div>
+
+<p>
+Compila y ejecuta, en mi sistema todas las pruebas fueron correctas.
+</p>
+
+<p>
+La macro <code>NTEST</code>, consiste en comprobar que el numero de
+coincidencias es el esperado, de lo contrario despliega un mensaje de error, con
+el numero de linea, el fichero, la prueba, el resultado optenido y el esperado.
+</p>
+
+<p>
+Ninguna bateria de pruebas es suficiente, siempre pueden presentarse casos
+imprevistos, por ejemplo, como reaciona el motor ante un conjunto o una ruta
+vacia? que deberia hacer cuando la cadena o la regexp son apuntadores
+vacios? despues de una coincidencia deberia consultarse el siguiente
+caracter de la cadena o continuar al final de la coincidencia?
+</p>
+
+<p>
+Las respuestas a estos misterios y mucho mas, en el proximo capitulo!
+</p>
+
+<dl class="org-dl">
+<dt> PS </dt><dd> Apartir de la siguiente seccion, eliminare todos los mensajes
+que se producen en <span class="file">regexp3.h</span>, son bastate
+molestos. Podrian suprimirse colocando el codigo dentro de directivas de
+compilacion condicional&#x2026; pero cosidero que esto solo enturbia la
+estructura del codigo.
+
+<p>
+Una vez te familiarices con el codigo, no necesitaras mas mensajes que
+los que se producen en las pruebas.
+</p>
+</dd>
+</dl>
+</div>
+
 </div>
 <div id="outline-container-sec-3-6-7" class="outline-4">
 <h4 id="sec-3-6-7">loops</h4>
