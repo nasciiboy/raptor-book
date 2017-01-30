@@ -99,7 +99,7 @@
     [[https://github.com/nasciiboy/raptor-book]], bajo el sistema de control de
     versiones @$(git).
 
-    Puedes clonar el repositiro con el comando:
+    Puedes clonar el repositorio con el comando:
 
     #+BEGIN_SRC sh
       git clone https://github.com/nasciiboy/raptor-book.git
@@ -147,16 +147,48 @@
 
     Actualmente la libreria sigue en desarrollo en dos repositorios
 
-    [[https://github.com/nasciiboy/RecursiveRegexpRaptor]] alias Regexp3: El punto
+    [[https://github.com/nasciiboy/RecursiveRegexpRaptor]] alias Regexp3. El punto
     de partida de la libreria. Es interesante ver los cambios entre cada version
     en particular el codigo inicial.
 
-    [[https://github.com/nasciiboy/RecursiveRegexpRaptor-4]] alias Regexp4: La ruta
-    actual de desarrollo. En su base contiene a Regexp3, con la unica diferencia
-    de ser mas eficiente respecto al consumo de CPU.
+    Para optener una copia del repositorio
 
-    Bien podrias acudir directamente al codigo de ambas versiones y tomar este
-    libro como una version super explicita de su funcionamiento.
+    #+BEGIN_SRC sh
+      git clone https://github.com/nasciiboy/RecursiveRegexpRaptor.git
+    #+END_SRC
+
+    [[https://github.com/nasciiboy/RecursiveRegexpRaptor-4]] alias Regexp4. En su
+    base contiene a Regexp3, con la diferencia de ser mas eficiente respecto al
+    consumo de CPU.
+
+    Para optener una copia del repositorio
+
+    #+BEGIN_SRC sh
+      git clone https://github.com/nasciiboy/RecursiveRegexpRaptor-4.git
+    #+END_SRC
+
+    Al momento de escribir estas lineas, el codigo de este libro y el del
+    repositorio difieren de forma evidente. En la practica, cada modificacion
+    por minuscula que sea, obliga a revisar todo el codigo del libro, ajustar
+    explicaciones y realizar nuevas pruebas. Ya que el motor cumple su mision
+    perfectamente y el codigo es coherente con sigo mismo, la construccion de
+    @e(regexp3) cubre hasta el commit
+    @c(e6f7c7f5ee916fb25a4b6931e6fb4fb6b142188a).
+
+    Como programadores, nuestro codigo refleja el nivel de conocimiento,
+    experiencia, creencias, manias, dedicacion y otros tantos aspectos
+    inherentes al aleatorio recorrido que transitamos. Aun no considero que el
+    motor este concluido, pese a esto, es mi mayor orgullo como programador,
+    espero que sea de utilidad y puedas aprender algun nuevo truco.
+
+    Al terminar este manual, tendras un motor regexp tan potente como para
+    implementar un editor de flujos similar a @$(sed), aun asi, date una vuelta
+    por el repositorio para ver si he mejorado el codigo o despues de revisar
+    por enesima ocacion alguna funcion he perdido el rumbo.
+
+    Si te consideras intrepido, pasa de esto y ve directamente al repo!
+
+    Happy Hacking!
 
 * RegExp
 
@@ -2102,7 +2134,7 @@
     #+BEGIN_EXAMPLE
       ┏━━━━━━━━━━━┓                   ▸ regexp llama a walker.
       ┃           ┃
-      ┃  regexp3  ┃                   ▸ walker optiene las rutas y las envia a treking
+      ┃  regexp3  ┃                   ▸ walker optiene las rutas y las envia a trekking
       ┃           ┃
       ┗━━━━━━━━━━━┛                   ▸ trekking optiene los constructores
          ┃  ▲      GROUP                - si el tipo es GROUP lo envia a walker
@@ -2163,12 +2195,730 @@
     esquema cuando existan 2 o mas rutas tendremos que hacer una llamada
     adicional (primero a @c(isPath) y luego a @c(walker)), sin mencionar que
     incementaria la complejidad/cantidad de codigo para resolver un problema ya
-    rusuelto. La unica razon para seguir este esquema es generar un registro
-    eficiente del orden de evaluacion de constructores, pero eso mi estimado
-    lector, sera implementado en la ultima seccion del libro (•>•)✘ʸᵉᵃʰ
-
+    resuelto. La unica razon para seguir este esquema es generar un registro
+    eficiente del orden de evaluacion de los constructores, pero eso, mi
+    estimado lector, sera implementado en la ultima seccion del libro.
 
 *** hook
+
+    Nuestro motor tendra la capacidad de almacenar el patron que se corresponda
+    con el contenido de una agrupacion, sin embargo, en muchos (si no es que en
+    la mayoria de los) casos, no se desea que el motor genere una captura cada
+    vez que aparece una agrupacion. Por ello crearemos una variante del
+    constructor @c(GROUP) de nombre @c(HOOK) (anzuelo).
+
+    El "nuevo" costructor es identico en comportamiento y estructura a
+    una agrupacion, con dos ligeras deferencias
+
+    1. utilizaremos los operadores los @c(<) y @c(>) en lugar de @c[(] y @c[)]
+
+    2. servira para indicarle explicitamente al motor que deseamos generar una
+       captura.
+
+
+    En esta seccion no implementaremos la funcionalidad de captura, nos
+    limitaremos a agregar el codigo necesario para que el motor pueda
+    identificar el nuevo constructor.
+
+    #+BEGIN_SRC c
+      #include <stdio.h>
+      #include <string.h>
+
+      #define TRUE  1
+      #define FALSE 0
+
+      enum TYPE { PATH, GROUP, HOOK, BACKREF, SET, RANGEAB, META, POINT, SIMPLE };
+
+      struct RE {
+        char     *ptr;
+        int       len;
+        enum TYPE type;
+      };
+
+      static int walker  ( struct RE  rexp );
+      static int trekking( struct RE *rexp );
+      static int cutPath ( struct RE *rexp, struct RE *track );
+      static int tracker ( struct RE *rexp, struct RE *track );
+
+      static char * trackerPoint( char *points, char *track, int len );
+
+      unsigned int regexp3( char *txt, char *re ){
+        struct RE    rexp;
+        rexp.ptr     = re;
+        rexp.len     = strlen( re );
+        rexp.type    = PATH;
+
+        return walker( rexp );
+      }
+
+      static int walker( struct RE rexp ){
+        struct RE track;
+
+        printf( "%-20s >>%.*s<<\n", "walker   INIT", rexp.len, rexp.ptr );
+        while( cutPath( &rexp, &track ) ){
+          printf( "%-20s >>%.*s<<\n", "walker   PATH", track.len, track.ptr );
+          trekking( &track );
+        }
+
+        return FALSE;
+      }
+
+      static int trekking( struct RE *rexp ){
+        struct RE track;
+
+        while( tracker( rexp, &track ) ){
+          if ( track.type == GROUP  ){
+            printf( "%-20s >>%.*s<<\n", "trekking GROUP", track.len, track.ptr );
+            walker( track );
+          } else if ( track.type == HOOK  ){
+            printf( "%-20s >>%.*s<<\n", "trekking HOOK", track.len, track.ptr );
+            walker( track );
+          } else if( track.type == SIMPLE ){
+            printf( "%-20s >>%.*s<<\n", "trekking SIMPLE", track.len, track.ptr );
+          }
+        }
+
+        return TRUE;
+      }
+
+      static int cutPath( struct RE *rexp, struct RE *track ){
+        if( rexp->len == 0 ) return FALSE;
+
+        *track = *rexp;
+
+        for( int i = 0, deep = 0; i < rexp->len; i++ ){
+          switch( rexp->ptr[ i ] ){
+          case '(': case '<': deep++; break;
+          case ')': case '>': deep--; break;
+          }
+
+          if( rexp->ptr[ i ] ==  '|' && deep == 0 ){
+            track->len  = i;
+            rexp->ptr  += i + 1;
+            rexp->len  -= i + 1;
+            return TRUE;
+          }
+        }
+
+        rexp->ptr += rexp->len;
+        rexp->len  = 0;
+
+        return TRUE;
+      }
+
+      static int tracker( struct RE *rexp, struct RE *track ){
+        if( rexp->len == 0 ) return FALSE;
+
+        *track = *rexp;
+
+        if( rexp->ptr[ 0 ] == '(' ){
+          for( int deep = 1, i = 1; i < rexp->len; i++ ){
+            if( rexp->ptr[ i ] ==  '(' ) deep++;
+            if( rexp->ptr[ i ] ==  ')' ) deep--;
+
+            if( deep == 0 ){
+              track->type = GROUP;
+              track->ptr++;
+              track->len  = rexp->ptr + i - track->ptr;
+              rexp->len  -= i + 1;
+              rexp->ptr  += i + 1;
+              return TRUE;
+            }
+          }
+        } else if( rexp->ptr[ 0 ] == '<' ){
+          for( int deep = 1, i = 1; i < rexp->len; i++ ){
+            if( rexp->ptr[ i ] ==  '<' ) deep++;
+            if( rexp->ptr[ i ] ==  '>' ) deep--;
+
+            if( deep == 0 ){
+              track->type = HOOK;
+              track->ptr++;
+              track->len  = rexp->ptr + i - track->ptr;
+              rexp->len  -= i + 1;
+              rexp->ptr  += i + 1;
+              return TRUE;
+            }
+          }
+        }
+
+        track->type = SIMPLE;
+
+        char *point;
+        if( (point = trackerPoint( "(<", rexp->ptr + 1, rexp->len - 1 )) )
+          track->len = point - track->ptr;
+
+        rexp->len  -= track->len;
+        rexp->ptr  += track->len;
+
+        return TRUE;
+      }
+
+      static char * trackerPoint( char *points, char *track, int len ){
+        for( int pos = 0; pos < len; pos++ )
+          if( strchr( points, track[ pos ] ) ) return track + pos;
+
+        return 0;
+      }
+    #+END_SRC
+
+    es necesario comprobar que el codigo no altere el comportamiento en la(?)
+    prueba que ya tenemos
+
+    #+BEGIN_SRC c
+      regexp3( "", "a(b|c)|A(B|C)" );
+    #+END_SRC
+
+    compila y verifica que no haya cambios... bien? Ahora intenta con
+
+    #+BEGIN_SRC c
+      regexp3( "", "<a(b|c)|A(B|C)>|1234(ea|eb|ec)" );
+    #+END_SRC
+
+    a que funciona! Aqui el resultado (con ligeras modificaciones)
+
+    #+BEGIN_EXAMPLE
+      walker   init        >><a(b|c)|A(B|C)>|1234(ea|eb|ec)<<    ┌──▶ walker inicial
+      walker   PATH        >><a(b|c)|A(B|C)><<                   ├─┬▶ walker primer ruta
+      trekking HOOK         >>a(b|c)|A(B|C)<<                    │ └─┬> primer constructor: captura
+      walker   init         >>a(b|c)|A(B|C)<<                    │   ├──▶ walker recursivo
+      walker   PATH         >>a(b|c)<<                           │   ├─┬▶ walker primer ruta
+      trekking SIMPLE       >>a<<                                │   │ ├──> primer constructor : caracter
+      trekking GROUP          >>b|c<<                            │   │ └─┬> segundo constructor: agrupacion
+      walker   init           >>b|c<<                            │   │   ├──▶ walker recursivo
+      walker   PATH           >>b<<                              │   │   ├─┬▶ walker primer ruta
+      trekking SIMPLE         >>b<<                              │   │   │ └──> optiene el constructor
+      walker   PATH             >>c<<                            │   │   └─┬▶ walker segunda ruta
+      trekking SIMPLE           >>c<<                            │   │     └──> optiene el constructor
+      walker   PATH                >>A(B|C)<<                    │   └─┬▶ walker segunda ruta
+      trekking SIMPLE              >>A<<                         │     ├──> primer constructor : caracter
+      trekking GROUP                 >>B|C<<                     │     └─┬> segundo constructor: agrupacion
+      walker   init                  >>B|C<<                     │       ├──▶ walker recursivo
+      walker   PATH                  >>B<<                       │       ├─┬▶ walker primer ruta
+      trekking SIMPLE                >>B<<                       │       │ └──> optiene el constructor
+      walker   PATH                    >>C<<                     │       └─┬▶ walker segunda ruta
+      trekking SIMPLE                  >>C<<                     │         └──> optiene el constructor
+      walker   PATH                        >>1234(ea|eb|ec)<<    └─┬▶ walker segunda ruta
+      trekking SIMPLE                      >>1234<<                ├──> primer constructor : caracter
+      trekking GROUP                            >>ea|eb|ec<<       └─┬> segundo constructor: agrupacion
+      walker   init                             >>ea|eb|ec<<         ├──▶ walker recursivo
+      walker   PATH                             >>ea<<               ├─┬▶ walker primer ruta
+      trekking SIMPLE                           >>ea<<               │ └──> optiene el constructor
+      walker   PATH                                >>eb<<            ├─┬▶ walker segunda ruta
+      trekking SIMPLE                              >>eb<<            │ └──> optiene el constructor
+      walker   PATH                                   >>ec<<         └─┬▶ walker tercer ruta
+      trekking SIMPLE                                 >>ec<<           └──> optiene el constructor
+    #+END_EXAMPLE
+
+    Vamos pues a examinar el codigo.
+
+    El primer y poco interesante cambio se encuentra en @c(trekking), donde
+    agregamos una condicion adicional para evaluar al nuevo constructor. Puedes
+    ver que el codigo es identico al de la condicion @c(GROUP), solamente se a
+    adaptado el mensaje de salida.
+
+    Algo mas estimulante sucende en @c(cutTrack) dentro del bucle @c(for)
+
+    #+BEGIN_SRC c
+      for( int i = 0, deep = 0; i < rexp->len; i++ ){
+        switch( rexp->ptr[ i ] ){
+        case '(': case '<': deep++; break;
+        case ')': case '>': deep--; break;
+        }
+
+        if( rexp->ptr[ i ] ==  '|' && deep == 0 ){
+          track->len  = i;
+          rexp->ptr  += i + 1;
+          rexp->len  -= i + 1;
+          return TRUE;
+        }
+      }
+    #+END_SRC
+
+    En la version anterior, teniamos una secuencia de @c(if)s para averiguar si
+    estabamos o no dentro de una agrupacion, en cambio, ahora tenemos un solo
+    @c(switch) que realiza la misma funcion en lugar de tener cuatro
+    instrucciones @c(if) o @c(if)-@c(else), por ejemplo:
+
+    #+BEGIN_SRC c
+      if( rexp->ptr[ i ] == '(' ) deep++;
+      if( rexp->ptr[ i ] == '<' ) deep++;
+      if( rexp->ptr[ i ] == ')' ) deep--;
+      if( rexp->ptr[ i ] == '>' ) deep--;
+    #+END_SRC
+
+    o
+
+    #+BEGIN_SRC c
+      if( rexp->ptr[ i ] == '(' ) deep++;
+      else if( rexp->ptr[ i ] == '<' ) deep++;
+      else if( rexp->ptr[ i ] == ')' ) deep--;
+      else if( rexp->ptr[ i ] == '>' ) deep--;
+    #+END_SRC
+
+    Cuando se necesita evaluar el contenido de una variable y actuar segun casos
+    especificos, un @c(switch) no solo es mas compacto y agradable a la vista,
+    ademas es mas veloz. Dentro de un switch se realiza una sola evaluacion y
+    luego se @e(salta) al caso, es decir el tiempo para realizar un switch es
+    independiente del numero de casos (o eso dicen [[https://elbauldelprogramador.com/por-que-un-switch-es-mas-rapido-que-su-homologo-if-then-else/][aqui]])
+
+    Siguendo el flujo de modificaciones llegamos a @c(tracker). La estrategia es
+    la misma que en @c(trekking), copiar el codigo para @c(GROUP), ponerlo en la
+    secuencia @c(if)-@c(else) y modificar operadores y tipo, en fin, nada
+    nuevo...  ¡alto! El nuevo constructor trae con sigo nuevos operadores a
+    identificar, tanto al inicio de su constructor, como al final de un segmento
+    de tipo @c(SIMPLE).
+
+    Podemos afrontar la nueva situacion con @c(strnchr) + una nueva variable +
+    un par de @c(if)s, o modificar la funcion y darle un nombre mas adecuado:
+    @c(trackerPoint).
+
+    #+BEGIN_SRC c
+      static char * trackerPoint( char *points, char *track, int len ){
+        for( int pos = 0; pos < len; pos++ )
+          if( strchr( points, track[ pos ] ) ) return track + pos;
+
+        return 0;
+      }
+    #+END_SRC
+
+    A diferencia de @c(strnchr), @c(trackerPoint) no se limita a la busqueda de
+    solo un caracter, la nueva funcion realiza la busqueda de un conjunto de
+    caracteres (en forma de cadena de caracteres).
+
+    @c(points) es el conjuto de puntos (caracteres) a rastrear, @c(track) es la
+    region donde se realiza la busqueda y @c(len) la longitud de la region. La
+    funcion regresa la posicion de la primer coincidencia o un puntero nulo.
+
+    esto es lo que hace
+
+    - un bucle recorre la region (@c(track)) caracter a caracter,
+
+    - con @c(strchr) buscamos el caracter en la cadena de rastreo
+      (@c(points))
+
+    - si hay coincidencia regresamos la posicion actual de la cadena.
+
+    - si termina el ciclo regeresamos un puntero nulo.
+
+**** Refactorizacion
+
+     Dentro de @c(tracker), es posible identificar la sintaxis de todos los
+     constructores, empleando instrucciones @c(if)-@c(else if)-@c(else
+     if)-...-@c(else), simpre y cuando, tener un monton de codigo duplicado en
+     una funcion obesa no genere ningun transtorno mental en nuestro ser.
+
+     si vamos a @c(tracker) podemos ver que
+
+     #+BEGIN_SRC c
+       if( rexp->ptr[ i ] ==  '(' ) deep++;
+       if( rexp->ptr[ i ] ==  ')' ) deep--;
+
+       if( deep == 0 ){
+         track->type = GROUP;
+         track->ptr++;
+         track->len  = rexp->ptr + i - track->ptr;
+         rexp->len  -= i + 1;
+         rexp->ptr  += i + 1;
+         return TRUE;
+       }
+     #+END_SRC
+
+     es casi identico a
+
+     #+BEGIN_SRC c
+       if( rexp->ptr[ i ] ==  '<' ) deep++;
+       if( rexp->ptr[ i ] ==  '>' ) deep--;
+
+       if( deep == 0 ){
+         track->type = HOOK;
+         track->ptr++;
+         track->len  = rexp->ptr + i - track->ptr;
+         rexp->len  -= i + 1;
+         rexp->ptr  += i + 1;
+         return TRUE;
+       }
+     #+END_SRC
+
+     y similar a
+
+     #+BEGIN_SRC c
+       switch( rexp->ptr[ i ] ){
+       case '(': case '<': deep++; break;
+       case ')': case '>': deep--; break;
+       }
+
+       if( rexp->ptr[ i ] ==  '|' && deep == 0 ){
+         track->len  = i;
+         rexp->ptr  += i + 1;
+         rexp->len  -= i + 1;
+         return TRUE;
+       }
+     #+END_SRC
+
+     en @c(cutPath).
+
+     Tambien se repiten muchas lineas para "recorrer" el contenido de una
+     expresion:
+
+     #+BEGIN_SRC c
+       rexp->ptr  += len;
+       rexp->len  -= len;
+     #+END_SRC
+
+     ('̀-'́)ง Si funciona por que eliminar el codigo duplicado?
+
+     Segun los gurus:
+
+     - mas codigo son mas instrucciones a entender, no para nosotros, si para
+       quien intente averiguar que es lo que estamos haciendo.
+
+     - mas codigo expone al programa a mas puntos de fallo, mas puntos de fallo
+       requieren mas pruebas, mas pruebas requieren mas trabajo, mas trabajo
+       conduce al lado obscuro
+
+     - cualquier modificacion ha de hacerse tantas ocaciones como duplicados
+       existan
+
+     - mayor esfuerzo para mantener coherentes las duplicidades.
+
+     - cuanto mas grande es una funcion mas costosa es su ejecucion, en el caso
+       de nuestro motor que se basa en recursividad el costo es aun mayor
+
+
+     ┬┴┬┴┤ (ಠ├┬┴┬┴ debo ser honesto, eliminar el codigo duplicado fue una labor
+     en la que tarde mas de un mes... Intenta resolver el problema por tu
+     cuenta, despues comparalo con mi solucion:
+
+     #+BEGIN_SRC c
+       #include <stdio.h>
+       #include <string.h>
+
+       #define TRUE  1
+       #define FALSE 0
+
+       enum TYPE { PATH, GROUP, HOOK, BACKREF, SET, RANGEAB, META, POINT, SIMPLE };
+
+       struct RE {
+         char     *ptr;
+         int       len;
+         enum TYPE type;
+       };
+
+       static int  walker     ( struct RE  rexp );
+       static int  trekking   ( struct RE *rexp );
+       static int  tracker    ( struct RE *rexp, struct RE *track );
+       static int  trackByType( struct RE *rexp, struct RE *track, int type );
+       static void trackByLen ( struct RE *rexp, struct RE *track, int len, int type );
+       static void fwrRexp    ( struct RE *rexp, int len );
+
+       unsigned int regexp3( char *txt, char *re ){
+         struct RE    rexp;
+         rexp.ptr     = re;
+         rexp.len     = strlen( re );
+         rexp.type    = PATH;
+
+         return walker( rexp );
+       }
+
+       static int walker( struct RE rexp ){
+         struct RE track;
+
+         printf( "%-20s >>%.*s<<\n", "walker   INIT", rexp.len, rexp.ptr );
+         while( trackByType( &rexp, &track, PATH ) ){
+           printf( "%-20s >>%.*s<<\n", "walker   PATH", track.len, track.ptr );
+           trekking( &track );
+         }
+
+         return FALSE;
+       }
+
+       static int trekking( struct RE *rexp ){
+         struct RE track;
+
+         while( tracker( rexp, &track ) ){
+           switch( track.type ){
+           case GROUP:
+             printf( "%-20s >>%.*s<<\n", "trekking GROUP", track.len, track.ptr );
+             walker( track );
+             break;
+           case HOOK :
+             printf( "%-20s >>%.*s<<\n", "trekking HOOK", track.len, track.ptr );
+             walker( track );
+             break;
+           default   :
+             printf( "%-20s >>%.*s<<\n", "trekking SIMPLE", track.len, track.ptr );
+           }
+         }
+
+         return TRUE;
+       }
+
+       static int trackByType( struct RE *rexp, struct RE *track, int type ){
+         if( rexp->len == 0 ) return FALSE;
+
+         *track = *rexp;
+         track->type = type;
+
+         for( int cut, i = 0, deep = 0; i < rexp->len; i++ ){
+           switch( rexp->ptr[ i ] ){
+           case '(': case '<': deep++; break;
+           case ')': case '>': deep--; break;
+           }
+
+           switch( type ){
+           case HOOK    : cut = deep == 0; break;
+           case GROUP   : cut = deep == 0; break;
+           case PATH    : cut = deep == 0 && rexp->ptr[i] == '|'; break;
+           }
+
+           if( cut ){
+             track->len  = i;
+             fwrRexp( rexp, i + 1 );
+             if( type != PATH ) fwrRexp( track, 1 );
+             return TRUE;
+           }
+         }
+
+         fwrRexp( rexp, rexp->len );
+         return TRUE;
+       }
+
+       static int tracker( struct RE *rexp, struct RE *track ){
+         if( rexp->len == 0 ) return FALSE;
+
+         switch( *rexp->ptr ){
+         case '(': trackByType( rexp, track, GROUP ); break;
+         case '<': trackByType( rexp, track, HOOK  ); break;
+         default :
+           for( int i = 1; i < rexp->len; i++ )
+             switch( rexp->ptr[ i ] ){
+             case '(': case '<':
+               trackByLen( rexp, track, i, SIMPLE  ); return TRUE;
+             }
+
+           trackByLen( rexp, track, rexp->len, SIMPLE  );
+         }
+
+         return TRUE;
+       }
+
+       static void trackByLen( struct RE *rexp, struct RE *track, int len, int type ){
+         *track       = *rexp;
+         track->type  = type;
+         track->len   = len;
+         fwrRexp( rexp, len );
+       }
+
+       static void fwrRexp( struct RE *rexp, int len ){
+         rexp->ptr += len; rexp->len -= len;
+       }
+     #+END_SRC
+
+     @c(cutPath) y el codigo duplicado en @c(tracker) se agruparon en una nueva
+     funcion llamada @c(trackByType):
+
+     #+BEGIN_SRC c
+       static int trackByType( struct RE *rexp, struct RE *track, int type ){
+         if( rexp->len == 0 ) return FALSE;            // ➊
+
+         *track = *rexp;                               // ➋
+         track->type = type;                           // ➌
+
+         for( int cut, i = 0, deep = 0; i < rexp->len; i++ ){
+           switch( rexp->ptr[ i ] ){                   // ➍
+           case '(': case '<': deep++; break;
+           case ')': case '>': deep--; break;
+           }
+
+           switch( type ){                             // ➎
+           case HOOK    : cut = deep == 0; break;
+           case GROUP   : cut = deep == 0; break;
+           case PATH    : cut = deep == 0 && rexp->ptr[i] == '|'; break;
+           }
+
+           if( cut ){                                  // ➏
+             track->len = i;                           // ➐
+             fwrRexp( rexp, i + 1 );                   // ➑
+             if( type != PATH ) fwrRexp( track, 1 );   // ➒
+             return TRUE;
+           }
+         }
+
+         fwrRexp( rexp, rexp->len );                   // ➓
+         return TRUE;
+       }
+     #+END_SRC
+
+     La funcion inicia de forma habitual, comprobando si la exprecion (no) esta
+     vacia ➊.
+
+     Se copia el contenido de la exprecion dentro de la seccion ➋ y se modifica
+     el tipo del constructor ➌.
+
+     Luego, inicia el recorrido atraves de la exprecion. Con ayuda de un
+     @c(switch) ➍ examinamos el contenido de la posicion actual, en busca de
+     operadores de agrupacion (con o sin captura) para conocer el nivel de
+     anidamiento, segun el operador, se incrementa o decrementa el nivel de
+     anidamiento.
+
+     A continuacion con otro @c(switch) ➎ establecemos el valor de la variable
+     @c(cut), su mision es servir de señal para realizar o no el corte de la
+     seccion ➏. Asignamos el valor de @c(cut) mediente evaluaciones booleanas
+     que dependen del tipo de corte, hasta ahora: @c(HOOK), @c(GROUP) y
+     @c(PATH). En los primeros dos casos el corte se realiza cuando el nivel de
+     anidamiento es igual a cero, en el caso de ser un corte tipo @c(PATH)
+     ademas debemos estar sobre el operador @c(|).
+
+     Si el corte ➏ se lleva a cabo, establecemos la longitud de la seccion ➐,
+     que abarca desda la posicion 0 hasta el caracter previo a la posicion
+     actual.
+
+     Echando mano de una nueva funcion de nombre @c(fwrRexp) ➑ @e(recorremos) la
+     posicion de inicio de la expresion. @c(fwrRexp) substituye las sentencias
+
+     #+BEGIN_SRC c
+       rexp->ptr  += rexp->len;
+       rexp->len  -= rexp->len;
+     #+END_SRC
+
+     resive como parametros un puntero a la estructura @c(RE) y el numero de
+     posiciones que vamos a @e(recorrer) el punto de inicio
+
+     #+BEGIN_SRC c
+       static void fwrRexp( struct RE *track, int len ){
+         track->ptr += len; track->len -= len;
+       }
+     #+END_SRC
+
+     de esta manera la sencencia @c[fwrRexp( rexp, i + 1 );] ➑, significa que
+     recorremos el contenido de @c(rexp) en @c(i + 1) posiciones. El @c(+1) es
+     para descartar el operador actual (@c[)], @c(>) o @c(|)) en la siguiente
+     llamada a @c(cutByType).
+
+     Tambiene tenemos una evaluacion que mueve el punto de inicio de la seccion
+     @c(track) una posicion si el tipo de corte no es de tipo @c(PATH). Asi
+     descartamos el operador de apertura de los cortes @c(HOOK) y @c(GROUP)
+
+     visualmente esto es lo que ocurre en cortes de tipo @c(PATH)
+
+     #+BEGIN_EXAMPLE
+       ab(cdefghijklmnopqrstuv)|AB(CDEFGHIJKLMNOPQRSTUV)  ==> contenido en rexp
+       ▲                      ▲ ▲                      ▲
+       ┃   zona de interez    ┃ ┃   zona de interez    ┃
+       ┃  contenido en track  ┃ ┃  contenido en track  ┃
+       ┗━━━━━━━━━━━━━━━━━━━━━━┛ ┗━━━━━━━━━━━━━━━━━━━━━━┛
+                               ▲▲
+                              ┏┛┗━┓
+                              ┃   ┃
+                              i + 1
+                                AB(CDEFGHIJKLMNOPQRSTUV)  ==> nuevo contenido en rexp
+     #+END_EXAMPLE
+
+     y esto en cortes de tipo agrupacion
+
+     #+BEGIN_EXAMPLE
+       (cdefghijklmnopqrstuv)...
+       ▲▲                  ▲▲▲
+       ┃┃ zona de interez  ┃┃┃
+       ┃┃contenido en track┃┃┃
+       ┃┗━━━━━━━━━━━━━━━━━━┛┃┗━━┓
+       ┃▲                   i + 1 se descarta el signo de cierre
+       ┃┃
+       ┃┗━━┓ se descarta el signo de inicio
+       0 + 1 == fwrRexp( track, 1 )
+     #+END_EXAMPLE
+
+     Cuando el bucle atravez de la exprecion concluye sin realizar ningun corte,
+     la secccion @c(track) abarca todo la regexp @c(rexp) y la regexp queda
+     vacia ➓.
+
+     pasamos a los cambios en @c(trekking)
+
+     #+BEGIN_SRC c
+       static int trekking( struct RE *rexp ){
+         struct RE track;
+
+         while( tracker( rexp, &track ) ){
+           switch( track.type ){
+           case GROUP:
+             printf( "%-20s >>%.*s<<\n", "trekking GROUP", track.len, track.ptr );
+             walker( track );
+             break;
+           case HOOK :
+             printf( "%-20s >>%.*s<<\n", "trekking HOOK", track.len, track.ptr );
+             walker( track );
+             break;
+           default   :
+             printf( "%-20s >>%.*s<<\n", "trekking SIMPLE", track.len, track.ptr );
+           }
+         }
+
+         return TRUE;
+       }
+     #+END_SRC
+
+     ehh, no hay mucha diferencia, pasamos de @c(if)s en serie a un @c(switch)
+     con casos. El cambio mas interesante esta en su funcion auxiliar
+     @c(tracker)
+
+     #+BEGIN_SRC c
+       static int tracker( struct RE *rexp, struct RE *track ){
+         if( rexp->len == 0 ) return FALSE;
+
+         switch( *rexp->ptr ){                                     // ➊
+         case '(': trackByType( rexp, track, GROUP ); break;       // ➋
+         case '<': trackByType( rexp, track, HOOK  ); break;       // ➌
+         default :                                                 // ➍
+           for( int i = 1; i < rexp->len; i++ )                    // ➎
+             switch( rexp->ptr[ i ] ){                             // ➏
+             case '(': case '<':
+               trackByLen( rexp, track, i, SIMPLE  ); return TRUE; // ➐
+             }
+
+           trackByLen( rexp, track, rexp->len, SIMPLE  );          // ➑
+         }
+
+         return TRUE;
+       }
+     #+END_SRC
+
+     Una vez mas, un @c(switch) es el protagonista del show. Como haciamos en la
+     version anterior, el tipo de la seccion mas a la izquierda, depende del
+     contenido de la primer posicion en la cadena miembro de @c(rexp) ➊.
+     Actuamos segun el operador, para @c[(] hacemos un corte @c(GROUP) ➋, para
+     @c(<) un corte @c(HOOK) ➌. El resto ➍ caen bajo un corte de tipo
+     @c(SIMPLE) ➐➑, solo debemos averiguar la extension de esta seccion, para lo
+     cual se realiza un recorrido por la expresion ➎, hasta dar con un operador
+     ➏ de interes, de lo contrario la seccion abarca toda la expresion ➑.
+
+     Es particularmente relevante utilizar @c(return TRUE) en ➐, un @c(break)
+     saldria del @c(switch) pero no romperia con la ejecucion del ciclo @c(for),
+     toma nota, sera relevante mas adelante.
+
+     ✌(ﾟ∀ﾟ)✌ nada mal, un @c(for) + @c(switch) para substituir dos funciones
+     @c(trackerPoint) y @c(strchr), encima el codigo paso de tener 138 lineas a
+     123, 15 lineas menos en las que podemos implementar todo tipo de alocadas
+     funcionalidades...
+
+     Antes de pasar a otra cosa, aqui tenemos la funcion nos ayuda a cortar las
+     secciones por longitud (y tipo)
+
+     #+BEGIN_SRC c
+       static void trackByLen( struct RE *rexp, struct RE *track, int len, int type ){
+         *track       = *rexp;
+         track->type  = type;
+         track->len   = len;
+         fwrRexp( rexp, len );
+       }
+     #+END_SRC
+
+     sencillo: copiar todo el contenido de @c(rexp) a @c(track), modificar el tipo,
+     longitud y recorren @c(rexp) @m(n) posiciones.
+
+     Como siempre verificamos que la prueba optenga el mismo resultado. En la
+     siguiente seccion activaremos pruebas que no requieran ver linea a linea lo
+     la informacion que sale de motor.
+
 *** match
 *** loops
 *** set & meta & point
@@ -2201,6 +2951,8 @@
   https://es.wikipedia.org/wiki/UTF-8
 
   https://es.wikipedia.org/wiki/Byte
+
+  https://elbauldelprogramador.com/por-que-un-switch-es-mas-rapido-que-su-homologo-if-then-else/
 
   Mastering Regular Expressions, 2nd Edition By Jeffrey E. F. Friedl
   https://se.ifmo.ru/~ad/Documentation/Mastering_RegExp/mastregex2-CHP-4-SECT-3.html
