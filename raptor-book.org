@@ -1,7 +1,6 @@
 #+TITLE:  Recursive Regexp Raptor
 #+AUTHOR:  nasciiboy
 #+LANGUAGE:  es
-#+DATE:
 #+OPTIONS: *:nil  ^:nil f:nil num:nil html-postamble:nil html-style:nil html-scripts:nil
 #+HTML_HEAD: <link rel="stylesheet" type="text/css" href="worg-data/worg.css" />
 
@@ -92,7 +91,7 @@
     el trabajo, con o sin modificaciones y de forma comercial o no comercial.
 
     Todo aquel que obtenga una copia de este material tiene derecho a conservar
-    las mismas condicines de uso, es decir, tanto el original como las versiones
+    las mismas condiciones de uso, es decir, tanto el original como las versiones
     modificadas tendran la misma licencia.
 
     El codigo de este libro se encuentra alojado en
@@ -550,8 +549,8 @@
    No voy a decirte el sistema bajo el que deberias programar, tampoco si es
    mejor utilizar un editor, un IDE o Emacs, ni cual compilador, shell o mapeo
    de teclado sea el mas apropiado. Seguramente has elegido tus herramientas
-   tras una profunda refleccion, luego evaluar todas las posibilidades y no por
-   que alguien te impuso su uso...
+   tras una profunda refleccion, luego de evaluar todas las posibilidades y no
+   por que alguien te impuso su uso...
 
    No obstante y solamente por motivos informativos, te presento la configuracion
    que utilizo y el porque:
@@ -1430,7 +1429,7 @@
       }
     #+END_SRC
 
-    en este fichero aplicaremos diversas pruebas al motor para virificar el
+    en este fichero aplicaremos diversas pruebas al motor para verificar el
     correcto funcionamiento de cada caracteristica que vallamos agregando.
 
     Compila el codigo con el siguiete comando
@@ -3350,8 +3349,8 @@
       unsigned int regexp3( char *txt, char *re ){
         struct RE    rexp;
         rexp.ptr     = re;
-        rexp.len     = strlen( re );
         rexp.type    = PATH;
+        rexp.len     = strlen( re );
         text.len     = strlen( txt );
 
         if( text.len == 0 || rexp.len == 0 ) return 0;
@@ -3965,6 +3964,1173 @@
     #+END_SRC
 
 *** set & meta & point
+
+    Los conjuntos (o corchetes) son un constructor especialmente complejo (o
+    no), ya que en sus entrañas es posible encontrar tres sintaxis distintas:
+    caracteres, rangos y metaracteres, por si no fuera suficiente, encima, es
+    posible @e(negar) el contenido de un conjunto, si este inicia con el
+    caracter @c(^).
+
+    Intentando simplificar el asunto, las nuevas sintaxis, seran tambien
+    constructores: @c(SIMPLE) (el mismo que ya utilizamos), @c(META) y
+    @c(RANGEAB).
+
+    Con todo, el codigo no se modifica en exeso asi que tambien se agrega el
+    constructor punto, esto significa que al termino de la seccion tendremos
+    operativos todos los constructores basicos!
+
+    #+BEGIN_SRC c
+      #include <ctype.h>
+      #include <string.h>
+      #include <stdlib.h>
+
+      #define TRUE            1
+      #define FALSE           0
+      #define INF    1073741824 // 2^30
+
+      struct TEXT {
+        char *ptr;
+        int   pos;
+        int   len;
+      } static text;
+
+      enum TYPE { PATH, GROUP, HOOK, BACKREF, SET, RANGEAB, META, POINT, SIMPLE };
+
+      struct RE {
+        char     *ptr;
+        int       len;
+        enum TYPE type;
+        unsigned int loopsMin, loopsMax;
+      };
+
+      static int  walker     ( struct RE  rexp );
+      static int  trekking   ( struct RE *rexp );
+      static int  looper     ( struct RE *rexp );
+      static int  tracker    ( struct RE *rexp, struct RE *track );
+      static int  trackByType( struct RE *rexp, struct RE *track, int type );
+      static void trackByLen ( struct RE *rexp, struct RE *track, int len, int type );
+      static void fwrRexp    ( struct RE *rexp, int len );
+
+      static void getLoops   ( struct RE *rexp, struct RE *track );
+
+      static int  match      ( struct RE *rexp );
+      static int  matchSet   ( struct RE  rexp );
+      static int  matchMeta  ( struct RE *rexp, int   chr );
+      static int  matchText  ( struct RE *rexp, char *txt );
+
+      static int  walkMeta       ( char *str );
+      static int  walkSet        ( char *str, int len );
+      static int  countCharDigits( char *str );
+
+      unsigned int regexp3( char *txt, char *re ){
+        struct RE    rexp;
+        rexp.ptr     = re;
+        rexp.type    = PATH;
+        rexp.len     = strlen( re );
+        text.len     = strlen( txt );
+
+        if( text.len == 0 || rexp.len == 0 ) return 0;
+
+        int result   = 0;
+        for( int forward, i = 0, loops = text.len; i < loops; i += forward ){
+          forward    = 1;
+          text.pos   = 0;
+          text.ptr   = txt   + i;
+          text.len   = loops - i;
+
+          if( walker( rexp ) ){
+            result++;
+            if( text.pos > 0 ) forward = text.pos;
+          }
+        }
+
+        return result;
+      }
+
+      static int walker( struct RE rexp ){
+        struct RE track;
+        for( const int oPos = text.pos; trackByType( &rexp, &track, PATH ); text.pos = oPos )
+          if( trekking( &track ) ) return TRUE;
+
+        return FALSE;
+      }
+
+      static int trekking( struct RE *rexp ){
+        struct RE track;
+        while( tracker( rexp, &track ) )
+          if( looper( &track ) == FALSE ) return FALSE;
+
+        return TRUE;
+      }
+
+      static int looper( struct RE *rexp ){
+        int forward, loops = 0;
+
+        switch( rexp->type ){
+        case HOOK: case GROUP: case PATH:
+          while( loops < rexp->loopsMax && walker( *rexp ) )
+            loops++;
+          break;
+        case SET: case BACKREF: case META: case RANGEAB: case POINT: case SIMPLE:
+          while( loops < rexp->loopsMax && text.pos < text.len && (forward = match( rexp )) ){
+            text.pos += forward;
+            loops++;
+          }
+        }
+
+        return loops < rexp->loopsMin ? FALSE : TRUE;
+      }
+
+      static int trackByType( struct RE *rexp, struct RE *track, int type ){
+        if( rexp->len == 0 ) return FALSE;
+
+        *track = *rexp;
+        track->type = type;
+
+        for( int cut, i = 0, deep = 0; (i += walkMeta( rexp->ptr + i )) < rexp->len; i++ ){
+          switch( rexp->ptr[ i ] ){
+          case '(': case '<': deep++; break;
+          case ')': case '>': deep--; break;
+          case '[': i += walkSet( rexp->ptr + i, rexp->len - i ); break;
+          }
+
+          switch( type ){
+          case HOOK    : cut = deep == 0; break;
+          case GROUP   : cut = deep == 0; break;
+          case SET     : cut =              rexp->ptr[i] == ']'; break;
+          case PATH    : cut = deep == 0 && rexp->ptr[i] == '|'; break;
+          }
+
+          if( cut ){
+            track->len  = i;
+            fwrRexp( rexp, i + 1 );
+            if( type != PATH ) fwrRexp( track, 1 );
+            return TRUE;
+          }
+        }
+
+        fwrRexp( rexp, rexp->len );
+        return TRUE;
+      }
+
+      static int tracker( struct RE *rexp, struct RE *track ){
+        if( rexp->len == 0 ) return FALSE;
+
+        switch( *rexp->ptr ){
+        case ':': trackByLen ( rexp, track, 2, META  ); break;
+        case '.': trackByLen ( rexp, track, 1, POINT ); break;
+        case '(': trackByType( rexp, track,    GROUP ); break;
+        case '<': trackByType( rexp, track,    HOOK  ); break;
+        case '[': trackByType( rexp, track,    SET   ); break;
+        default :
+          for( int i = 1; i < rexp->len; i++ )
+            switch( rexp->ptr[ i ] ){
+            case '(': case '<': case '[': case ':': case '.':
+              trackByLen( rexp, track, i, SIMPLE  ); goto getL;
+            case '?': case '+': case '*': case '{': case '-':
+              if( i == 1 ){
+                if( rexp->ptr[i] == '-' ) trackByLen( rexp, track, 3, RANGEAB );
+                else                      trackByLen( rexp, track, 1, SIMPLE  );
+              } else                      trackByLen( rexp, track, i - 1, SIMPLE  );
+              goto getL;
+            }
+
+          trackByLen( rexp, track, rexp->len, SIMPLE  );
+        }
+
+       getL:
+        getLoops( rexp, track );
+        return TRUE;
+      }
+
+      static void trackByLen( struct RE *rexp, struct RE *track, int len, int type ){
+        *track       = *rexp;
+        track->type  = type;
+        track->len   = len;
+        fwrRexp( rexp, len );
+      }
+
+
+      static void fwrRexp( struct RE *rexp, int len ){
+        rexp->ptr += len; rexp->len -= len;
+      }
+
+      static int walkSet( char *str, int len ){
+        for( int i = 0; (i += walkMeta( str + i )) < len; i++ )
+          if( str[i] == ']' ) return i;
+
+        return len;
+      }
+
+      static int walkMeta( char *str ){
+        for( int i = 0; ; i += 2 )
+          if( str[i] != ':' ) return i;
+      }
+
+      static void getLoops( struct RE *rexp, struct RE *track ){
+        track->loopsMin = 1; track->loopsMax = 1;
+
+        if( rexp->len )
+          switch( *rexp->ptr ){
+          case '?' : track->loopsMin = 0; track->loopsMax =   1; fwrRexp( rexp, 1 ); return;
+          case '+' : track->loopsMin = 1; track->loopsMax = INF; fwrRexp( rexp, 1 ); return;
+          case '*' : track->loopsMin = 0; track->loopsMax = INF; fwrRexp( rexp, 1 ); return;
+          case '{' : fwrRexp( rexp, 1 );
+            track->loopsMin = atoi( rexp->ptr );
+            fwrRexp( rexp, countCharDigits( rexp->ptr ) );
+            if( *rexp->ptr == ',' ){
+              fwrRexp( rexp, 1 );
+              if( *rexp->ptr == '}' )
+                track->loopsMax = INF;
+              else {
+                track->loopsMax = atoi( rexp->ptr );
+                fwrRexp( rexp, countCharDigits( rexp->ptr  ) );
+              }
+            } else track->loopsMax = track->loopsMin;
+
+            fwrRexp( rexp, 1 );
+          }
+      }
+
+      static int countCharDigits( char *str ){
+        for( int digits = 0; ; digits++ )
+          if( isdigit( *str++ ) == 0 ) return digits;
+      }
+
+      static int match( struct RE *rexp ){
+        switch( rexp->type ){
+        case POINT  : return text.pos < text.len;
+        case RANGEAB: return text.ptr[ text.pos ] >= rexp->ptr[ 0 ] &&
+                             text.ptr[ text.pos ] <= rexp->ptr[ 2 ];
+        case SET    : return matchSet ( *rexp );
+        case META   : return matchMeta( rexp, text.ptr[text.pos]  );
+        default     : return matchText( rexp, text.ptr + text.pos );
+        }
+      }
+
+      static int matchText( struct RE *rexp, char *txt ){
+        return strncmp( txt, rexp->ptr, rexp->len )  == 0 ? rexp->len : 0;
+      }
+
+      static int matchMeta( struct RE *rexp, int chr ){
+        switch( rexp->ptr[1] ){
+        case 'a' : return isalpha( chr ) != 0;
+        case 'A' : return isalpha( chr ) == 0;
+        case 'd' : return isdigit( chr ) != 0;
+        case 'D' : return isdigit( chr ) == 0;
+        case 'w' : return isalnum( chr ) != 0;
+        case 'W' : return isalnum( chr ) == 0;
+        case 's' : return isspace( chr ) != 0;
+        case 'S' : return isspace( chr ) == 0;
+        default  : return rexp->ptr[1] == chr;
+        }
+      }
+
+      static char * strnchr( char *str, int chr, int n ){
+        for( int i = 0; i < n && str[ i ]; i++ )
+          if( str[ i ] == chr ) return str + i;
+
+        return 0;
+      }
+
+      static int matchSet( struct RE rexp ){
+        struct RE track;
+        int result = 0, reverse = *rexp.ptr == '^';
+
+        if( reverse ) fwrRexp( &rexp, 1 );
+
+        while( tracker( &rexp, &track ) ){
+          switch( track.type ){
+          case RANGEAB: case META: case POINT:
+            result = match( &track ); break;
+          default:
+            result = strnchr( track.ptr, text.ptr[ text.pos ], track.len  ) != 0;
+          }
+
+          if( result ) return reverse ? FALSE : result;
+        }
+
+        return reverse ? TRUE : FALSE;
+      }
+    #+END_SRC
+
+    Primero, recompila, luego, realiza las pruebas... todo 0K?
+
+    Pasamos a examinar como se realizan los nuevos cortes en la funcion
+    @c(tracker):
+
+    #+BEGIN_SRC c
+      static int tracker( struct RE *rexp, struct RE *track ){
+        if( rexp->len == 0 ) return FALSE;
+
+        switch( *rexp->ptr ){                                    // ➊
+        case ':': trackByLen ( rexp, track, 2, META  ); break;   // ➋
+        case '.': trackByLen ( rexp, track, 1, POINT ); break;   // ➌
+        case '(': trackByType( rexp, track,    GROUP ); break;
+        case '<': trackByType( rexp, track,    HOOK  ); break;
+        case '[': trackByType( rexp, track,    SET   ); break;   // ➍
+        default :
+          for( int i = 1; i < rexp->len; i++ )
+            switch( rexp->ptr[ i ] ){
+            case '(': case '<': case '[': case ':': case '.':    // ➎
+              trackByLen( rexp, track, i, SIMPLE  ); goto getL;
+            case '?': case '+': case '*': case '{': case '-':    // ➏
+              if( i == 1 ){                                      // ➐
+                if( rexp->ptr[i] == '-' ) trackByLen( rexp, track, 3, RANGEAB );      // ➑
+                else                      trackByLen( rexp, track, 1, SIMPLE  );      // ➒
+              } else                      trackByLen( rexp, track, i - 1, SIMPLE  );  // ➓
+              goto getL;
+            }
+
+          trackByLen( rexp, track, rexp->len, SIMPLE  );
+        }
+
+       getL:
+        getLoops( rexp, track );
+        return TRUE;
+      }
+    #+END_SRC
+
+    El @c(switch) principal ➊ no oculta su proposito, cada caso muestra de forma
+    evidente nuestra intencion. Conocemos la sintaxis del constructor, la
+    constante que prepresenta su tipo y la accion: cortar por longitud
+    (@c(trackByLen)) o por tipo (@c(trackByType)). Los nuevos constructores no
+    son una exepcion ➋➌➍.
+
+    (Recuerda que la sintaxis de @c(regexp3) difiere de la de otros motores, los
+    metacaracteres no inician con el prefijo @c(\), en su lugar se utiliza @c(:))
+
+    Σ(-᷅_-᷄๑) ? Bueno el caso @c(default) no es tan claro como el resto, sobre
+    todo porque aqui es donde se realiza el corte de los rangos, pero veremos
+    que no es inaccesible.
+
+    Agregamos los operadores @c(:) y @c(.) al codigo que establece el limite de
+    la seccion de caracteres ➎
+
+    Gestionar el corte de los rangos requiere otro enfoque, aunque no es muy
+    distinto al de los cuntificadores, asi que ponemos el caso junto a estos ➏.
+
+    Si aparece una exprecion como esta
+
+    #+BEGIN_EXAMPLE
+      abc1-9
+    #+END_EXAMPLE
+
+    hasta donde abarca la seccion @c(SIMPLE)? Del caracter @c(a) al caracter
+    @c(c), o lo que es lo mismo, la posicion del operador @c(-) menos @m(1) ➓.
+
+    en la siguiente iteracion quedaria
+
+    #+BEGIN_EXAMPLE
+      1-9
+    #+END_EXAMPLE
+
+    cuando el operador @c(-) esta en la posicion @m(1) ➐ la seccion abarca tres
+    caracteres ➑. Para la misma posicion, si el operador no es @c(-), significa
+    que tenemos un cuantificador, asi que la seccion afecta a un solo caracter
+    ➒.
+
+    La inclusion de los metacaracteres obliga a tomar consideraciones extra
+    cuado se analiza el contenido de la expresion, de otra forma expresiones
+    como
+
+    #+BEGIN_EXAMPLE
+      :||:a
+    #+END_EXAMPLE
+
+    o
+
+    #+BEGIN_EXAMPLE
+      (abc:))
+    #+END_EXAMPLE
+
+    o
+
+    #+BEGIN_EXAMPLE
+      :[[123]
+    #+END_EXAMPLE
+
+    provocarian resultados erroneos y en el peor de los casos, un error de
+    segmentacion si se recorre el arreglo que contiene la expresion, mas alla de
+    su limite.
+
+    #+BEGIN_SRC c
+      static int trackByType( struct RE *rexp, struct RE *track, int type ){
+        if( rexp->len == 0 ) return FALSE;
+
+        *track = *rexp;
+        track->type = type;
+
+        for( int cut, i = 0, deep = 0; (i += walkMeta( rexp->ptr + i )) < rexp->len; i++ ){ // ➊
+          switch( rexp->ptr[ i ] ){
+          case '(': case '<': deep++; break;
+          case ')': case '>': deep--; break;
+          case '[': i += walkSet( rexp->ptr + i, rexp->len - i ); break;                    // ➋
+          }
+
+          switch( type ){
+          case HOOK    : cut = deep == 0; break;
+          case GROUP   : cut = deep == 0; break;
+          case SET     : cut =              rexp->ptr[i] == ']'; break;                     // ➌
+          case PATH    : cut = deep == 0 && rexp->ptr[i] == '|'; break;
+          }
+
+          if( cut ){
+            track->len  = i;
+            fwrRexp( rexp, i + 1 );
+            if( type != PATH ) fwrRexp( track, 1 );
+            return TRUE;
+          }
+        }
+
+        fwrRexp( rexp, rexp->len );
+        return TRUE;
+      }
+    #+END_SRC
+
+    La funcion @c(walkMeta) ➊ regresa el numero de caracteres consecutivos con
+    @"(apariencia) de metacaracter. Desde luego, su ubicacion dentro de la
+    condicion del bucle @c(for) no es accidental, sumamos la cantidad de
+    metacaracteres a la ubicacion actual y luego se comprueba que sigamos dentro
+    de la expresion (comparacion con @c(rexp->len)).
+
+    Ya dentro del bucle, no hay metacaracteres que interfieran o confundan la
+    validez de los operadores a evaluar... a menos que crusemos el inospito
+    territorio del constructor conocido como @e(conjunto) (recondemos que dentro
+    de un conjunto signos como @c[(], @c[)], @c(|), @c(?), etc. no necesitan
+    escaparse), la solucion? algo similar a @c(walkMeta), en este caso la
+    funcion se llama @c(walkSet) ➋.
+
+    @c(walkSet) a diferencia de @c(walkMeta), regresa la @e(posicion de cierre)
+    del constructor, que deberia corresponderse con el operador @c(]). Opera de
+    esta forma para coincidir con la forma en que se realiza el corte de las
+    agrupaciones @c(SET) ➌, con lo que el codigo que realiza el corte no
+    requiere ninguna modificacion.
+
+    Aqui estan las definicion de @c(walkMeta) y @c(walkSet)
+
+    #+BEGIN_SRC c
+      static int walkSet( char *str, int len ){
+        for( int i = 0; (i += walkMeta( str + i )) < len; i++ )
+          if( str[i] == ']' ) return i;
+
+        return len;
+      }
+
+      static int walkMeta( char *str ){
+        for( int i = 0; ; i += 2 )
+          if( str[i] != ':' ) return i;
+      }
+    #+END_SRC
+
+    Primero @c(walkMeta). La funcion aunque un poco rebuscada, dice, si la
+    posicion actual tiene una sintaxis de metacaracter (es igual a @c(:)) avanza
+    a la siguiente posicion (@c(i += 2)) de otra forma regresa la posicion
+    actual. Simple y eficaz! amenos que nos envien una expresion como
+
+    #+BEGIN_EXAMPLE
+      :a:b:
+    #+END_EXAMPLE
+
+    donde el ultimo @c(:) probocaria la revision de un indice fuera de los
+    limites del arreglo...
+
+    Veamos @c(walkSet). Esquivamos los metacacteres y si encontramos el operador
+    de cierre regresamos su posicion. Como medida preventiva, si termina el
+    bucle sin coincidencia, regresamos la longitud de la seccion, de hay la
+    variable @c(len).
+
+    En alguna version @c(walkSet) tenia este aspecto
+
+    #+BEGIN_SRC c
+      static int walkSet( char *str ){
+        int i = 0;
+        while( TRUE )
+          switch( str[ i ] ){
+          case ']': return i;
+          case ':': i += 2; break;
+          default :    i++; break;
+          }
+      }
+    #+END_SRC
+
+    funcionaba? claro, incluso era mas eficiente, en fin, un poco de seguridad
+    tampoco biene mal.
+
+    En este punto ya tenemos los nuevos constructores, necesario es
+    confrontarlos con el contenido de la cadena.
+
+    #+BEGIN_SRC c
+      static int looper( struct RE *rexp ){
+        int forward, loops = 0;
+
+        switch( rexp->type ){
+        case HOOK: case GROUP: case PATH:
+          while( loops < rexp->loopsMax && walker( *rexp ) )
+            loops++;
+          break;
+        case SET: case BACKREF: case META: case RANGEAB: case POINT: case SIMPLE:
+          while( loops < rexp->loopsMax && text.pos < text.len && (forward = match( rexp )) ){
+            text.pos += forward;
+            loops++;
+          }
+        }
+
+        return loops < rexp->loopsMin ? FALSE : TRUE;
+      }
+    #+END_SRC
+
+    tres cosas cambian en @c(looper)
+
+    1. se declara la variable @c(forward),
+
+    2. @c(forward) se establece con el valor devuelto por @c(match), que regresa
+       el numero de caracteres que coinciden (verdadero) o 0 (falso)
+
+    3. movemos la posicion de la cadena los @m(n) caracteres que coinciden
+
+
+    mientras tanto @c(match) adquiere nuevos poderes
+
+    #+BEGIN_SRC c
+      static int match( struct RE *rexp ){
+        switch( rexp->type ){
+        case POINT  : return text.pos < text.len;                        // ➊
+        case RANGEAB: return text.ptr[ text.pos ] >= rexp->ptr[ 0 ] &&   // ➋
+                             text.ptr[ text.pos ] <= rexp->ptr[ 2 ];
+        case SET    : return matchSet ( *rexp );                         // ➌
+        case META   : return matchMeta( rexp, text.ptr[text.pos]  );     // ➍
+        default     : return matchText( rexp, text.ptr + text.pos );     // ➎
+        }
+      }
+    #+END_SRC
+
+
+    (」゜ロ゜)」 momento! en @c(looper) ya conociamos el tipo de constructor, efectuar
+    un @c(switch) adicional, dentro de @c(match) no es redundante?
+
+    [-┏ω┓-] quiza, sin enbargo colocar codigo en cada caso de @c(looper) al
+    estilo:
+
+    #+BEGIN_SRC c
+      while( loops < rexp->loopsMax && text.pos < text.len && (steps = matchXXXX( rexp )) ){
+        text.pos += steps;
+        loops++;
+       }
+    #+END_SRC
+
+    donde @c(matchXXXX) es la llamada especializada de cada costructor, me
+    parece exesivo, ademas segun una prueba para ver el rendimiento, la llamada
+    @"(intermedia) a @c(match) y su @c(switch) ofrecen un mejor desempeño
+    respecto a la velocidad.
+
+    Resuelto el dilema, analicemos el primer caso. En nuestro motor @c(POINT)
+    coincide con cualquier caracter, por lo tanto si no se ha alcanzado el final
+    de la cadena, tenemos una coincidencia ➊.
+
+    Los rangos, faciles tambien son ➋. Mediante una evaluacion booleana
+    comprobamos que el valor del caracter en la posicion actual de la cadena sea
+    mayor o igual al limite inferior del rango (primer elemento del rango,
+    indice 0) y a su vez menor o igual al limite superior (tercer elemento del
+    rango, indice 2). Recordemos que la cadena que define un rango de caracteres
+    esta forrmada por tres caracters y el segundo elemento es el signo @c(-).
+
+    ʕ´•ᴥ•`ʔ y para este constructor no veficamos antes, estar dentro del limite
+    da la cadena?
+
+    ＼_(￣、￣ 彡 ￣ー￣)_／ －☆・　・　・　‥……━━● (magia) no esperaba menos, en
+    efecto, podriamos colocar un @c(if) antes del @c(switch) que verifique el
+    limite. y una instruccion @c(return FALSE) al final de la funcion... o
+    dentro de @c(looper) ☜(ﾟ∀ﾟ✌) colocar esta condicion antes de realizar la
+    cosulta, como hemos venido haciendo desde que aparecio @c(match) en el
+    codigo.
+
+    Por orden de complejidad, seguiria el caso @c(default) donde cae la busqueda
+    de texto, tal cual aparece en el constructor:
+
+    #+BEGIN_SRC c
+      static int matchText( struct RE *rexp, char *txt ){
+        return strncmp( txt, rexp->ptr, rexp->len )  == 0 ? rexp->len : 0;
+      }
+    #+END_SRC
+
+    en esencia es el @c(match) de la seccion previa con un nombre distinto. Se
+    emplea @c(defualt) en lugar de @c(SIMPLE) para suprimir advertencias del
+    compilador.
+
+    Continuemos con los metacaracteres
+
+    #+BEGIN_SRC c
+      static int matchMeta( struct RE *rexp, int chr ){
+        switch( rexp->ptr[1] ){                 // ➊
+        case 'a' : return isalpha( chr ) != 0;  // ➋
+        case 'A' : return isalpha( chr ) == 0;  // ➌
+        case 'd' : return isdigit( chr ) != 0;  // ➍
+        case 'D' : return isdigit( chr ) == 0;  // ➎
+        case 'w' : return isalnum( chr ) != 0;  // ➏
+        case 'W' : return isalnum( chr ) == 0;  // ➐
+        case 's' : return isspace( chr ) != 0;  // ➑
+        case 'S' : return isspace( chr ) == 0;  // ➒
+        default  : return rexp->ptr[1] == chr;  // ➓
+        }
+      }
+    #+END_SRC
+
+    En nuestro motor un meta caracter esta formado por dos caracteres, el
+    indicador de metacaracter (@c(:)) y el metacaracter en si. El primer paso es
+    averiguar el metacarater ➊, luego deacuerdo a el caso, realizamos una accion
+    especifica segun los metacracteres que deseemos implementar. En esta
+    implementacion son:
+
+    - (@c(a)) cualquier caracter en el rango a-z o A-Z ➋.
+    - (@c(A)) cualquier caracter que no este en el rango a-z o A-Z ➌.
+    - (@c(d)) cualquier caracter en el rango 0-9 ➍.
+    - (@c(D)) cualquier carácter que no este en el rango 0-9 ➎.
+    - (@c(w)) cualquier carácter alfanumérico ➏ (a-z, A-Z o 0-9, por motivos
+      fuera de mi comprension, los motores de las grandes ligas tambien incluien
+      como alfanumerico, el caracter @c(_), regexp3 no sigue este comportamiento).
+    - (@c(W)) cualquier carácter no alfanumérico ➐.
+    - (@c(s)) cualquier caracter que sea un espacio en blanco ➑.
+    - (@c(S)) cualquier carácter que no sea un espacio en blanco ➒.
+
+
+    Afortunadamente, la libreria @c(ctype) incluye funciones para evaluar estos
+    casos. Lamentablemente el valor que retornan en caso de acierto es demasiado
+    ambiguo, segun se lee en el manual
+
+    #+BEGIN_QUOTE
+       Los valores devueltos son no-cero si el carácter cae dentro de la clase
+       pedida, y cero si no.
+    #+END_QUOTE
+
+    Es decir, exepto cuando el caracter no cae dentro de la clasificacion, nos
+    puede regresar el valor que les venga en gana. Haran uso de un generador de
+    numeros aleatorios y luego una verificacion de que el valor no sea cero para
+    cumplir la especificacion? Ni idea. La solucion mas sencilla es aplicar una
+    evaluacion booleana al retorno.
+
+    Los casos no definidos (@c[(], @c[)], @c([), @c(]), ..., etc.), se tratan
+    como simples caracteres ➓.
+
+    Por cierto, esta funcion (como el resto de las tipo @c(match)) regresa la
+    cantidad de caracteres que coinciden, es decir, nos permite implementar
+    metacaracteres que comparen mas de un caracter, podrian ser dos, tres o de
+    la longitud que se nos ocurra, incluso si lo gestionamos bien expresiones
+    regulares!
+
+    Regresando a @c(match), el caso @c(SET) para los constructores conjunto ➌,
+    es de lejos el mas complejo. La expresion que almacena sigue sin procesar,
+    sumado a esto, posee un modificador que no tiene ningun otro constructor,
+    @e(la negacion).
+
+    #+BEGIN_SRC c
+      static int matchSet( struct RE rexp ){               // ➊
+        struct RE track;
+        int result = 0, reverse = *rexp.ptr == '^';        // ➋
+
+        if( reverse ) fwrRexp( &rexp, 1 );                 // ➌
+
+        while( tracker( &rexp, &track ) ){                 // ➍
+          switch( track.type ){
+          case RANGEAB: case META: case POINT:
+            result = match( &track ); break;               // ➎
+          default:
+            result = strnchr( track.ptr, text.ptr[ text.pos ], track.len  ) != 0;  // ➏
+          }
+
+          if( result ) return reverse ? FALSE : result;    // ➐
+        }
+
+        return reverse ? TRUE : FALSE;                     // ➑
+      }
+    #+END_SRC
+
+    Es interesante desde el argumento. Al igual que @c(walker) opera con una
+    copia de la estructura @c(RE) ➊. Necesitamos optener los componentes de la
+    exprecion, no obstante estos se descartan de la expresion original a medida
+    que se optinen ➍. Si manejaramos un puntero en lugar de una copia y el
+    constructor requiriera mas de un ciclo de repeticion, para el segundo ciclo
+    la exprecion origen, estaria imcompleta o vacia y el resultado seria
+    incorrecto.
+
+    Es valido que existan metacaracteres dentro de los conjuntos, ya que el
+    numero de caracteres con el que pueden coincider es arbitrario necesitamos
+    almacenar el resultado. Ademas debemos activar el modificador de negacion
+    (@c(reverse)) si el primer caracter del conjunto es el signo @c(^) ➋ y
+    descartarlo de la expresion avanzando un caracter ➌.
+
+    Una vez que tenemos los constructores, hace falta verificar uno a uno, hasta
+    optener una coincidencia o terminal el bucle @c(while).
+
+    Si terminamos el bucle @c(while) sin ninguna coincidencia se devuelve
+    @c(FALSE) a menos que @c(reverse) este activo, en ese caso devolvemos
+    @c(TRUE) ➑.
+
+    Si hay una coincidencia devolvemos @c(TRUE) a menos que @c(reverse) este
+    activo, en ese caso devolvemos @c(FALSE) ➐.
+
+    La evalucion de cada componente depende de su tipo... alucinantes
+    recursiones, echamos mano de @c(match) ➎ al examinar rangos, metacaracteres
+    y @e(punto)? (ha, por que no?).
+
+    Las secuencias de caracteres requieren un trato especial. Debe compararse
+    caracter a caracter de la secuencia, contra el caracter de la posicion
+    actual en cadena. Dos opciones surgen, un @c(for) o invocar de entre los
+    muertos a una funcion antes descartada @c(strnchr)! ➏
+
+    (!#&)┘? utilizar @e(tracker) para optener (casi) todos los constructores, no
+    hace necesario aplicar escapes a cada signo relevante en los conjuntos...
+    alto, no, no solo eso, tambien proboca que existan rangos fuera de las
+    agrupaciones, wtf?
+
+    ♨(⋆‿⋆)♨ je, es una @"(caracteristica) o un inconveniente de facil solucion.
+    Solo hay que eliminar el reconocimiento de rangos de @c(tracker) e
+    implementar un @c(tracker) especifico para los conjuntos.
+
+    (っ◕‿◕)っ (づ｡◕‿‿◕｡)づ (ノಠ益ಠ)ノ (ノ・∀・)ノ (Todos: ¡Felicidades
+    (Shinji)!)
+
+    Ya esta listo nuestro motor regexp 100% funcional (con caracteristicas
+    especiales incluidas)
+
+    Algunas pruebas (ya sabes, al final del ultimo @c(NTEST) dentro de @f(test.c)):
+
+    #+BEGIN_SRC c
+      NTEST( "a", ":a", 1 );
+      NTEST( "a", ":A", 0 );
+      NTEST( "a", ":d", 0 );
+      NTEST( "a", ":D", 1 );
+      NTEST( "a", ":w", 1 );
+      NTEST( "a", ":W", 0 );
+      NTEST( "a", ":s", 0 );
+      NTEST( "a", ":S", 1 );
+      NTEST( "A", ":a", 1 );
+      NTEST( "A", ":A", 0 );
+      NTEST( "A", ":d", 0 );
+      NTEST( "A", ":D", 1 );
+      NTEST( "A", ":w", 1 );
+      NTEST( "A", ":W", 0 );
+      NTEST( "A", ":s", 0 );
+      NTEST( "A", ":S", 1 );
+      NTEST( "4", ":a", 0 );
+      NTEST( "4", ":A", 1 );
+      NTEST( "4", ":d", 1 );
+      NTEST( "4", ":D", 0 );
+      NTEST( "4", ":w", 1 );
+      NTEST( "4", ":W", 0 );
+      NTEST( "4", ":s", 0 );
+      NTEST( "4", ":S", 1 );
+      NTEST( " ", ":a", 0 );
+      NTEST( " ", ":A", 1 );
+      NTEST( " ", ":d", 0 );
+      NTEST( " ", ":D", 1 );
+      NTEST( " ", ":w", 0 );
+      NTEST( " ", ":W", 1 );
+      NTEST( " ", ":s", 1 );
+      NTEST( " ", ":S", 0 );
+      NTEST( "\t", ":a", 0 );
+      NTEST( "\t", ":A", 1 );
+      NTEST( "\t", ":d", 0 );
+      NTEST( "\t", ":D", 1 );
+      NTEST( "\t", ":w", 0 );
+      NTEST( "\t", ":W", 1 );
+      NTEST( "\t", ":s", 1 );
+      NTEST( "\t", ":S", 0 );
+
+      NTEST( "abc", ":a", 3 );
+      NTEST( "abc", ":A", 0 );
+      NTEST( "abc", ":d", 0 );
+      NTEST( "abc", ":D", 3 );
+      NTEST( "abc", ":w", 3 );
+      NTEST( "abc", ":W", 0 );
+      NTEST( "abc", ":s", 0 );
+      NTEST( "abc", ":S", 3 );
+      NTEST( "ABC", ":a", 3 );
+      NTEST( "ABC", ":A", 0 );
+      NTEST( "ABC", ":d", 0 );
+      NTEST( "ABC", ":D", 3 );
+      NTEST( "ABC", ":w", 3 );
+      NTEST( "ABC", ":W", 0 );
+      NTEST( "ABC", ":s", 0 );
+      NTEST( "ABC", ":S", 3 );
+      NTEST( "123", ":a", 0 );
+      NTEST( "123", ":A", 3 );
+      NTEST( "123", ":d", 3 );
+      NTEST( "123", ":D", 0 );
+      NTEST( "123", ":w", 3 );
+      NTEST( "123", ":W", 0 );
+      NTEST( "123", ":s", 0 );
+      NTEST( "123", ":S", 3 );
+      NTEST( " \n\t", ":a", 0 );
+      NTEST( " \n\t", ":A", 3 );
+      NTEST( " \n\t", ":d", 0 );
+      NTEST( " \n\t", ":D", 3 );
+      NTEST( " \n\t", ":w", 0 );
+      NTEST( " \n\t", ":W", 3 );
+      NTEST( " \n\t", ":s", 3 );
+      NTEST( " \n\t", ":S", 0 );
+      NTEST( " \n\t", ":a", 0 );
+      NTEST( " \n\t", ":A", 3 );
+      NTEST( " \n\t", ":d", 0 );
+      NTEST( " \n\t", ":D", 3 );
+      NTEST( " \n\t", ":w", 0 );
+      NTEST( " \n\t", ":W", 3 );
+      NTEST( " \n\t", ":s", 3 );
+      NTEST( " \n\t", ":S", 0 );
+
+      NTEST( "abc", ":a+", 1 );
+      NTEST( "abc", ":A+", 0 );
+      NTEST( "abc", ":d+", 0 );
+      NTEST( "abc", ":D+", 1 );
+      NTEST( "abc", ":w+", 1 );
+      NTEST( "abc", ":W+", 0 );
+      NTEST( "abc", ":s+", 0 );
+      NTEST( "abc", ":S+", 1 );
+      NTEST( "ABC", ":a+", 1 );
+      NTEST( "ABC", ":A+", 0 );
+      NTEST( "ABC", ":d+", 0 );
+      NTEST( "ABC", ":D+", 1 );
+      NTEST( "ABC", ":w+", 1 );
+      NTEST( "ABC", ":W+", 0 );
+      NTEST( "ABC", ":s+", 0 );
+      NTEST( "ABC", ":S+", 1 );
+      NTEST( "123", ":a+", 0 );
+      NTEST( "123", ":A+", 1 );
+      NTEST( "123", ":d+", 1 );
+      NTEST( "123", ":D+", 0 );
+      NTEST( "123", ":w+", 1 );
+      NTEST( "123", ":W+", 0 );
+      NTEST( "123", ":s+", 0 );
+      NTEST( "123", ":S+", 1 );
+      NTEST( " \n\t", ":a+", 0 );
+      NTEST( " \n\t", ":A+", 1 );
+      NTEST( " \n\t", ":d+", 0 );
+      NTEST( " \n\t", ":D+", 1 );
+      NTEST( " \n\t", ":w+", 0 );
+      NTEST( " \n\t", ":W+", 1 );
+      NTEST( " \n\t", ":s+", 1 );
+      NTEST( " \n\t", ":S+", 0 );
+      NTEST( " \n\t", ":a+", 0 );
+      NTEST( " \n\t", ":A+", 1 );
+      NTEST( " \n\t", ":d+", 0 );
+      NTEST( " \n\t", ":D+", 1 );
+      NTEST( " \n\t", ":w+", 0 );
+      NTEST( " \n\t", ":W+", 1 );
+      NTEST( " \n\t", ":s+", 1 );
+      NTEST( " \n\t", ":S+", 0 );
+
+      NTEST( "aeiou", ":a", 5 );
+
+      NTEST( "(((", ":(", 3 );
+      NTEST( ")))", ":)", 3 );
+      NTEST( "<<<", ":<", 3 );
+      NTEST( ">>>", ":>", 3 );
+      NTEST( ":::", "::", 3 );
+      NTEST( "|||", ":|", 3 );
+      NTEST( "###", ":#", 3 );
+      NTEST( ":#()|<>", ":::#:(:):|:<:>", 1 );
+      NTEST( ":#()|<>", "(::|:#|:(|:)|:||:<|:>)", 7 );
+      NTEST( "(test1)(test2)", ":(test:d:)", 2 );
+
+      NTEST( "",  ".",  0 );
+      NTEST( "a", ".",  1 );
+      NTEST( "aaa", ".", 3 );
+      NTEST( "a", "...", 0 );
+      NTEST( "a aaa aaa", ".", 9 );
+      NTEST( "a aaa aaa", "...", 3 );
+      NTEST( "a aaa aaa", ".aa", 2 );
+      NTEST( "a aaa aaa", "aa.", 2 );
+      NTEST( "Raptor Test", ".a", 1 );
+      NTEST( "Raptor Test", ".t", 2 );
+      NTEST( "Raptor Test", ".z", 0 );
+      NTEST( "Raptor Test", "a.", 1 );
+      NTEST( "Raptor Test", " .", 1 );
+      NTEST( "Raptor Test", "z.", 0 );
+      NTEST( "a", ".?", 1 );
+      NTEST( "a", ".+", 1 );
+      NTEST( "a", ".*", 1 );
+      NTEST( "a", ".{1}", 1 );
+      NTEST( "a aaa aaa", ".?", 9 );
+      NTEST( "a aaa aaa", ".+", 1 );
+      NTEST( "a aaa aaa", ".*", 1 );
+      NTEST( "a aaa aaa", ".{1}", 9 );
+      NTEST( "a", "a.?", 1 );
+      NTEST( "a", "a.+", 0 );
+      NTEST( "a", "a.*", 1 );
+      NTEST( "a", "a.{1}", 0 );
+      NTEST( "aeiou", "a|.", 5 );
+      NTEST( "aeiou", "a|.?", 5 );
+      NTEST( "aeiou", "a|.+", 2 );
+      NTEST( "aeiou", "a|.*", 2 );
+      NTEST( "aeiou", ".|a", 5 );
+      NTEST( "aeiou", ".?|a", 5 );
+      NTEST( "aeiou", ".+|a", 1 );
+      NTEST( "aeiou", ".*|a", 1);
+      NTEST( "aeiou", "(a|.)", 5 );
+      NTEST( "aeiou", "(a|.?)", 5 );
+      NTEST( "aeiou", "(a|.+)", 2 );
+      NTEST( "aeiou", "(a|.*)", 2 );
+      NTEST( "aeiou", "(.|a)", 5 );
+      NTEST( "aeiou", "(.?|a)", 5 );
+      NTEST( "aeiou", "(.+|a)", 1 );
+      NTEST( "aeiou", "(.*|a)", 1);
+      NTEST( "aeiou", "a|(.)", 5 );
+      NTEST( "aeiou", "a|(.?)", 5 );
+      NTEST( "aeiou", "a|(.+)", 2 );
+      NTEST( "aeiou", "a|(.*)", 2 );
+      NTEST( "aeiou", "(.)|a", 5 );
+      NTEST( "aeiou", "(.?)|a", 5 );
+      NTEST( "aeiou", "(.+)|a", 1 );
+      NTEST( "aeiou", "(.*)|a", 1);
+      NTEST( "aeiou", "a|(.)", 5 );
+      NTEST( "aeiou", "a|(.)?", 5 );
+      NTEST( "aeiou", "a|(.)+", 2 );
+      NTEST( "aeiou", "a|(.)*", 2 );
+      NTEST( "aeiou", "(.)|a", 5 );
+      NTEST( "aeiou", "(.)?|a", 5 );
+      NTEST( "aeiou", "(.)+|a", 1 );
+      NTEST( "aeiou", "(.)*|a", 1);
+      NTEST( "abababababababababababababababababababab", "." , 40 );
+      NTEST( "abababababababababababababababababababab", "(a.)" , 20 );
+      NTEST( "abababababababababababababababababababab", "(.a)" , 19 );
+      NTEST( "abababababababababababababababababababab", "(:a.)" , 20 );
+      NTEST( "abababababababababababababababababababab", "(.:a)" , 20 );
+      NTEST( "abababababababababababababababababababab", "(.{5}:a{5})" , 4 );
+
+      NTEST( "",  "a-z",  0 );
+      NTEST( "a", "a-z",  1 );
+      NTEST( "a", "A-Z",  0 );
+      NTEST( "A", "A-Z",  1 );
+      NTEST( "1", "a-z",  0 );
+      NTEST( "1", "0-9",  1 );
+      NTEST( "a", "0-9",  0 );
+      NTEST( "A", "0-9",  0 );
+      NTEST( "abc", "a-z", 3 );
+      NTEST( "a", "a-za-za-z", 0 );
+      NTEST( "a bcd efg", "a-z", 7 );
+      NTEST( "a bcd efg", "a-za-za-z", 2 );
+      NTEST( "a baa eaa", "a-zaa", 2 );
+      NTEST( "a aad aag", "aaa-z", 2 );
+      NTEST( "Raptor Test", "A-Za", 1 );
+      NTEST( "Raptor Test", "a-zt", 2 );
+      NTEST( "Raptor Test", "a-zz", 0 );
+      NTEST( "Raptor Test", "aa-z", 1 );
+      NTEST( "Raptor Test", " A-Z", 1 );
+      NTEST( "Raptor Test", "za-z", 0 );
+      NTEST( "a", "a-z?", 1 );
+      NTEST( "a", "a-z+", 1 );
+      NTEST( "a", "a-z*", 1 );
+      NTEST( "a", "a-z{1}", 1 );
+      NTEST( "a bcd efg", "a-z?", 9 );
+      NTEST( "a bcd efg", "a-z+", 3 );
+      NTEST( "a bcd efg", "a-z*", 5 );
+      NTEST( "a bcd efg", "a-z{1}", 7 );
+      NTEST( "a", "aa-z?", 1 );
+      NTEST( "a", "aa-z+", 0 );
+      NTEST( "a", "aa-z*", 1 );
+      NTEST( "a", "aa-z{1}", 0 );
+      NTEST( "aeiou", "a|a-z", 5 );
+      NTEST( "aeiou", "a|a-z?", 5 );
+      NTEST( "aeiou", "a|a-z+", 2 );
+      NTEST( "aeiou", "a|a-z*", 2 );
+      NTEST( "aeiou", "a-z|a", 5 );
+      NTEST( "aeiou", "a-z?|a", 5 );
+      NTEST( "aeiou", "a-z+|a", 1 );
+      NTEST( "aeiou", "a-z*|a", 1);
+      NTEST( "aeiou", "(a|a-z)", 5 );
+      NTEST( "aeiou", "(a|a-z?)", 5 );
+      NTEST( "aeiou", "(a|a-z+)", 2 );
+      NTEST( "aeiou", "(a|a-z*)", 2 );
+      NTEST( "aeiou", "(a-z|a)", 5 );
+      NTEST( "aeiou", "(a-z?|a)", 5 );
+      NTEST( "aeiou", "(a-z+|a)", 1 );
+      NTEST( "aeiou", "(a-z*|a)", 1);
+      NTEST( "aeiou", "a|(a-z)", 5 );
+      NTEST( "aeiou", "a|(a-z?)", 5 );
+      NTEST( "aeiou", "a|(a-z+)", 2 );
+      NTEST( "aeiou", "a|(a-z*)", 2 );
+      NTEST( "aeiou", "(a-z)|a", 5 );
+      NTEST( "aeiou", "(a-z?)|a", 5 );
+      NTEST( "aeiou", "(a-z+)|a", 1 );
+      NTEST( "aeiou", "(a-z*)|a", 1);
+      NTEST( "aeiou", "a|(a-z)", 5 );
+      NTEST( "aeiou", "a|(a-z)?", 5 );
+      NTEST( "aeiou", "a|(a-z)+", 2 );
+      NTEST( "aeiou", "a|(a-z)*", 2 );
+      NTEST( "aeiou", "(a-z)|a", 5 );
+      NTEST( "aeiou", "(a-z)?|a", 5 );
+      NTEST( "aeiou", "(a-z)+|a", 1 );
+      NTEST( "aeiou", "(a-z)*|a", 1);
+      NTEST( "1a2a3a4a5a6a", "1-6a", 6 );
+      NTEST( "1a2a3a4a5a6a", "1-3a", 3 );
+      NTEST( "1a2b3c4d5e6f", "1-6a-z", 6 );
+      NTEST( "1a2b3c4d5e6f", "1-3a-z", 3 );
+      NTEST( "abababababababababababababababababababab", "(aa-z)" , 20 );
+      NTEST( "abababababababababababababababababababab", "(a-za)" , 19 );
+      NTEST( "abababababababababababababababababababab", "(:aa-z)" , 20 );
+      NTEST( "abababababababababababababababababababab", "(a-z:a)" , 20 );
+      NTEST( "abababababababababababababababababababab", "(a-z{5}:a{5})" , 4 );
+
+      NTEST( "",  "[a]",  0 );
+      NTEST( "a", "[a]",  1 );
+      NTEST( "a", "[.]",  1 );
+      NTEST( ".", "[.]",  1 );
+      NTEST( "a", "[A]",  0 );
+      NTEST( "A", "[A]",  1 );
+      NTEST( "1", "[A]",  0 );
+      NTEST( "1", "[1]",  1 );
+      NTEST( "a", "[:a]", 1 );
+      NTEST( "A", "[:D]", 1 );
+      NTEST( "aaa", "[a-z]", 3 );
+      NTEST( "a", "[a-z][a-z][a-z]", 0 );
+      NTEST( "a aaa aaa", "[a-z]", 7 );
+      NTEST( "a aaa aaa", "[ a-z]", 9 );
+      NTEST( "a aaa aaa", "[a-z][a-z][a-z]", 2 );
+      NTEST( "a aaa aaa", "[a-z]aa", 2 );
+      NTEST( "a aaa aaa", "aa[a-z]", 2 );
+      NTEST( "Raptor Test", "[:w]a", 1 );
+      NTEST( "Raptor Test", "[:w]t", 2 );
+      NTEST( "Raptor Test", "[a-z]z", 0 );
+      NTEST( "Raptor Test", "a[a-z]", 1 );
+      NTEST( "Raptor Test", " [A-Z]", 1 );
+      NTEST( "Raptor Test", "z[a-z]", 0 );
+      NTEST( "a", "[a]?", 1 );
+      NTEST( "a", "[a]+", 1 );
+      NTEST( "a", "[a]*", 1 );
+      NTEST( "a", "[a]{1}", 1 );
+      NTEST( "a aaa aaa", "[a-z]?", 9 );
+      NTEST( "a aaa aaa", "[a-z]+", 3 );
+      NTEST( "a aaa aaa", "[a-z]*", 5 );
+      NTEST( "a aaa aaa", "[a-z]{1}", 7 );
+      NTEST( "a", "a[a-z]?", 1 );
+      NTEST( "a", "a[a-z]+", 0 );
+      NTEST( "a", "a[a-z]*", 1 );
+      NTEST( "a", "a[a-z]{1}", 0 );
+      NTEST( "aeiou", "a|[aeiou]", 5 );
+      NTEST( "aeiou", "a|[aeiou]?", 5 );
+      NTEST( "aeiou", "a|[aeiou]+", 2 );
+      NTEST( "aeiou", "a|[aeiou]*", 2 );
+      NTEST( "aeiou", "[aeiou]|a", 5 );
+      NTEST( "aeiou", "[aeiou]?|a", 5 );
+      NTEST( "aeiou", "[aeiou]+|a", 1 );
+      NTEST( "aeiou", "[aeiou]*|a", 1);
+      NTEST( "aeiou", "(a|[aeiou])", 5 );
+      NTEST( "aeiou", "(a|[aeiou]?)", 5 );
+      NTEST( "aeiou", "(a|[aeiou]+)", 2 );
+      NTEST( "aeiou", "(a|[aeiou]*)", 2 );
+      NTEST( "aeiou", "([aeiou]|a)", 5 );
+      NTEST( "aeiou", "([aeiou]?|a)", 5 );
+      NTEST( "aeiou", "([aeiou]+|a)", 1 );
+      NTEST( "aeiou", "([aeiou]*|a)", 1);
+      NTEST( "aeiou", "a|([aeiou])", 5 );
+      NTEST( "aeiou", "a|([aeiou]?)", 5 );
+      NTEST( "aeiou", "a|([aeiou]+)", 2 );
+      NTEST( "aeiou", "a|([aeiou]*)", 2 );
+      NTEST( "aeiou", "([aeiou])|a", 5 );
+      NTEST( "aeiou", "([aeiou]?)|a", 5 );
+      NTEST( "aeiou", "([aeiou]+)|a", 1 );
+      NTEST( "aeiou", "([aeiou]*)|a", 1);
+      NTEST( "aeiou", "a|([aeiou])", 5 );
+      NTEST( "aeiou", "a|([aeiou])?", 5 );
+      NTEST( "aeiou", "a|([aeiou])+", 2 );
+      NTEST( "aeiou", "a|([aeiou])*", 2 );
+      NTEST( "aeiou", "([aeiou])|a", 5 );
+      NTEST( "aeiou", "([aeiou])?|a", 5 );
+      NTEST( "aeiou", "([aeiou])+|a", 1 );
+      NTEST( "aeiou", "([aeiou])*|a", 1);
+      NTEST( "1a2a3a4a5a6a", "[1-6]a", 6 );
+      NTEST( "1a2a3a4a5a6a", "[1-3]a", 3 );
+      NTEST( "1a2b3c4d5e6f", "[123456][abcdef]", 6 );
+      NTEST( "1a2b3c4d5e6f", "[123][abcdef]", 3 );
+      NTEST( ".b.b.b.b.b.b.b.b.b.b.b.b.b.b.b.b.b.b.b.b", "[:.]",  20 );
+      NTEST( ".b.b.b.b.b.b.b.b.b.b.b.b.b.b.b.b.b.b.b.b", "[:.b]",  40 );
+      NTEST( "abababababababababababababababababababab", "(a[ab])" , 20 );
+      NTEST( "abababababababababababababababababababab", "([ab]a)" , 19 );
+      NTEST( "abababababababababababababababababababab", "(:a[ab])" , 20 );
+      NTEST( "abababababababababababababababababababab", "([ab]:a)" , 20 );
+      NTEST( "abababababababababababababababababababab", "([ab]{5}:a{5})" , 4 );
+      NTEST( "()<>[]{}*?+", "[:(:):<:>:[:]:{:}:*:?:+]", 11 );
+      NTEST( ")>}", "[)>}]", 3 );
+
+      NTEST( "",  "[^a]",  0 );
+      NTEST( "a", "[^1]",  1 );
+      NTEST( "a", "[^a]",  0 );
+      NTEST( "A", "[^a]",  1 );
+      NTEST( "1", "[^1]",  0 );
+      NTEST( "1", "[^A]",  1 );
+      NTEST( "a", "[^:a]", 0 );
+      NTEST( "A", "[^:A]", 1 );
+      NTEST( "aaa", "[^z]", 3 );
+      NTEST( "a", "[^z][^z][^z]", 0 );
+      NTEST( "a aaa aaa", "[^ ]", 7 );
+      NTEST( "a aaa aaa", "[^ a]", 0 );
+      NTEST( "a aaa aaa", "[^:d]", 9 );
+      NTEST( "a aaa aaa", "[^:d:s]", 7 );
+      NTEST( "a aaa aaa", "[^:d:s][^:d:s][^:d:s]", 2 );
+      NTEST( "a aaa aaa", "[^:d:s]aa", 2 );
+      NTEST( "a aaa aaa", "aa[^:d:s]", 2 );
+      NTEST( "Raptor Test", "[^:d:s]a", 1 );
+      NTEST( "Raptor Test", "[^A-Z]t", 2 );
+      NTEST( "Raptor Test", "[^:s]z", 0 );
+      NTEST( "Raptor Test", "a[^ ]", 1 );
+      NTEST( "Raptor Test", " [^t]", 1 );
+      NTEST( "Raptor Test", "z[^a]", 0 );
+      NTEST( "a", "[^z]?", 1 );
+      NTEST( "a", "[^z]+", 1 );
+      NTEST( "a", "[^z]*", 1 );
+      NTEST( "a", "[^z]{1}", 1 );
+      NTEST( "a aaa aaa", "[^ ]?", 9 );
+      NTEST( "a aaa aaa", "[^ ]+", 3 );
+      NTEST( "a aaa aaa", "[^ ]*", 5 );
+      NTEST( "a aaa aaa", "[^ ]{1}", 7 );
+      NTEST( "a", "a[^ ]?", 1 );
+      NTEST( "a", "a[^ ]+", 0 );
+      NTEST( "a", "a[^ ]*", 1 );
+      NTEST( "a", "a[^ ]{1}", 0 );
+      NTEST( "aeiou", "a|[^ ]", 5 );
+      NTEST( "aeiou", "a|[^ ]?", 5 );
+      NTEST( "aeiou", "a|[^ ]+", 2 );
+      NTEST( "aeiou", "a|[^ ]*", 2 );
+      NTEST( "aeiou", "[^ ]|a", 5 );
+      NTEST( "aeiou", "[^ ]?|a", 5 );
+      NTEST( "aeiou", "[^ ]+|a", 1 );
+      NTEST( "aeiou", "[^ ]*|a", 1);
+      NTEST( "aeiou", "(a|[^ ])", 5 );
+      NTEST( "aeiou", "(a|[^ ]?)", 5 );
+      NTEST( "aeiou", "(a|[^ ]+)", 2 );
+      NTEST( "aeiou", "(a|[^ ]*)", 2 );
+      NTEST( "aeiou", "([^ ]|a)", 5 );
+      NTEST( "aeiou", "([^ ]?|a)", 5 );
+      NTEST( "aeiou", "([^ ]+|a)", 1 );
+      NTEST( "aeiou", "([^ ]*|a)", 1);
+      NTEST( "aeiou", "a|([^ ])", 5 );
+      NTEST( "aeiou", "a|([^ ]?)", 5 );
+      NTEST( "aeiou", "a|([^ ]+)", 2 );
+      NTEST( "aeiou", "a|([^ ]*)", 2 );
+      NTEST( "aeiou", "([^ ])|a", 5 );
+      NTEST( "aeiou", "([^ ]?)|a", 5 );
+      NTEST( "aeiou", "([^ ]+)|a", 1 );
+      NTEST( "aeiou", "([^ ]*)|a", 1);
+      NTEST( "aeiou", "a|([^ ])", 5 );
+      NTEST( "aeiou", "a|([^ ])?", 5 );
+      NTEST( "aeiou", "a|([^ ])+", 2 );
+      NTEST( "aeiou", "a|([^ ])*", 2 );
+      NTEST( "aeiou", "([^ ])|a", 5 );
+      NTEST( "aeiou", "([^ ])?|a", 5 );
+      NTEST( "aeiou", "([^ ])+|a", 1 );
+      NTEST( "aeiou", "([^ ])*|a", 1);
+      NTEST( "1a2a3a4a5a6a", "[^:a]a", 6 );
+      NTEST( "1a2a3a4a5a6a", "[^4-6]a", 3 );
+      NTEST( "1a2b3c4d5e6f", "[^:a][^:d]", 6 );
+      NTEST( "1a2b3c4d5e6f", "[^4-6][^:d]", 3 );
+      NTEST( "abababababababababababababababababababab", "(a[^a])" , 20 );
+      NTEST( "abababababababababababababababababababab", "([^a]a)" , 19 );
+      NTEST( "abababababababababababababababababababab", "(:a[^a])" , 20 );
+      NTEST( "abababababababababababababababababababab", "([^b]:a)" , 20 );
+      NTEST( "abababababababababababababababababababab", "([^x]{5}:a{5})" , 4 );
+      NTEST( "()<>[]{}*?+", "[^:w]", 11 );
+    #+END_SRC
+
 *** mods
 *** Catch
 *** backreferences

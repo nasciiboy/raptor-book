@@ -235,7 +235,7 @@ el trabajo, con o sin modificaciones y de forma comercial o no comercial.
 
 <p>
 Todo aquel que obtenga una copia de este material tiene derecho a conservar
-las mismas condicines de uso, es decir, tanto el original como las versiones
+las mismas condiciones de uso, es decir, tanto el original como las versiones
 modificadas tendran la misma licencia.
 </p>
 
@@ -880,7 +880,7 @@ como para escribir, compilar y ejecutar un programa en C.
 No voy a decirte el sistema bajo el que deberias programar, tampoco si es mejor
 utilizar un editor, un IDE o Emacs, ni cual compilador, shell o mapeo de teclado
 sea el mas apropiado. Seguramente has elegido tus herramientas tras una profunda
-refleccion, luego evaluar todas las posibilidades y no por que alguien te impuso
+refleccion, luego de evaluar todas las posibilidades y no por que alguien te impuso
 su uso&#x2026;
 </p>
 
@@ -2007,7 +2007,7 @@ crea un fichero de nombre <span class="file">test.c</span> y coloca lo siguiente
 }</code></pre>
 
 <p>
-en este fichero aplicaremos diversas pruebas al motor para virificar el
+en este fichero aplicaremos diversas pruebas al motor para verificar el
 correcto funcionamiento de cada caracteristica que vallamos agregando.
 </p>
 
@@ -5067,6 +5067,1331 @@ NTEST( <span class="src-string">"Rap Captor Fest"</span>, <span class="src-strin
 
 <div id="outline-container-sec-3-6-8" class="outline-4">
 <h4 id="sec-3-6-8">set &amp; meta &amp; point</h4>
+<div class="outline-text-4" id="text-3-6-8">
+<p>
+Los conjuntos (o corchetes) son un constructor especialmente complejo (o
+no), ya que en sus entrañas es posible encontrar tres sintaxis distintas:
+caracteres, rangos y metaracteres, por si no fuera suficiente, encima, es
+posible <em>negar</em> el contenido de un conjunto, si este inicia con el caracter
+<code>^</code>.
+</p>
+
+<p>
+Intentando simplificar el asunto, las nuevas sintaxis, seran tambien
+constructores: <code>SIMPLE</code> (el mismo que ya utilizamos), <code>META</code> y
+<code>RANGEAB</code>.
+</p>
+
+<p>
+Con todo, el codigo no se modifica en exeso asi que tambien se agrega el
+constructor punto, esto significa que al termino de la seccion tendremos
+operativos todos los constructores basicos!
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-c"><span class="src-preprocessor">#include</span> <span class="src-string">&lt;ctype.h&gt;</span>
+<span class="src-preprocessor">#include</span> <span class="src-string">&lt;string.h&gt;</span>
+<span class="src-preprocessor">#include</span> <span class="src-string">&lt;stdlib.h&gt;</span>
+
+<span class="src-preprocessor">#define</span> <span class="src-variable-name">TRUE</span>            1
+<span class="src-preprocessor">#define</span> <span class="src-variable-name">FALSE</span>           0
+<span class="src-preprocessor">#define</span> <span class="src-variable-name">INF</span>    1073741824 <span class="src-comment-delimiter">// </span><span class="src-comment">2^30</span>
+
+<span class="src-keyword">struct</span> <span class="src-type">TEXT</span> {
+  <span class="src-type">char</span> *<span class="src-variable-name">ptr</span>;
+  <span class="src-type">int</span>   <span class="src-variable-name">pos</span>;
+  <span class="src-type">int</span>   <span class="src-variable-name">len</span>;
+} <span class="src-keyword">static</span> <span class="src-type">text</span>;
+
+<span class="src-keyword">enum</span> <span class="src-type">TYPE</span> { <span class="src-variable-name">PATH</span>, <span class="src-variable-name">GROUP</span>, <span class="src-variable-name">HOOK</span>, <span class="src-variable-name">BACKREF</span>, <span class="src-variable-name">SET</span>, <span class="src-variable-name">RANGEAB</span>, <span class="src-variable-name">META</span>, <span class="src-variable-name">POINT</span>, <span class="src-variable-name">SIMPLE</span> };
+
+<span class="src-keyword">struct</span> <span class="src-type">RE</span> {
+  <span class="src-type">char</span>     *<span class="src-variable-name">ptr</span>;
+  <span class="src-type">int</span>       <span class="src-variable-name">len</span>;
+  <span class="src-keyword">enum</span> <span class="src-type">TYPE</span> <span class="src-variable-name">type</span>;
+  <span class="src-type">unsigned</span> <span class="src-type">int</span> <span class="src-variable-name">loopsMin</span>, <span class="src-variable-name">loopsMax</span>;
+};
+
+<span class="src-keyword">static</span> <span class="src-type">int</span>  <span class="src-function-name">walker</span>     ( <span class="src-keyword">struct</span> <span class="src-type">RE</span>  <span class="src-variable-name">rexp</span> );
+<span class="src-keyword">static</span> <span class="src-type">int</span>  <span class="src-function-name">trekking</span>   ( <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">rexp</span> );
+<span class="src-keyword">static</span> <span class="src-type">int</span>  <span class="src-function-name">looper</span>     ( <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">rexp</span> );
+<span class="src-keyword">static</span> <span class="src-type">int</span>  <span class="src-function-name">tracker</span>    ( <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">rexp</span>, <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">track</span> );
+<span class="src-keyword">static</span> <span class="src-type">int</span>  <span class="src-function-name">trackByType</span>( <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">rexp</span>, <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">track</span>, <span class="src-type">int</span> <span class="src-variable-name">type</span> );
+<span class="src-keyword">static</span> <span class="src-type">void</span> <span class="src-function-name">trackByLen</span> ( <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">rexp</span>, <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">track</span>, <span class="src-type">int</span> <span class="src-variable-name">len</span>, <span class="src-type">int</span> <span class="src-variable-name">type</span> );
+<span class="src-keyword">static</span> <span class="src-type">void</span> <span class="src-function-name">fwrRexp</span>    ( <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">rexp</span>, <span class="src-type">int</span> <span class="src-variable-name">len</span> );
+
+<span class="src-keyword">static</span> <span class="src-type">void</span> <span class="src-function-name">getLoops</span>   ( <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">rexp</span>, <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">track</span> );
+
+<span class="src-keyword">static</span> <span class="src-type">int</span>  <span class="src-function-name">match</span>      ( <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">rexp</span> );
+<span class="src-keyword">static</span> <span class="src-type">int</span>  <span class="src-function-name">matchSet</span>   ( <span class="src-keyword">struct</span> <span class="src-type">RE</span>  <span class="src-variable-name">rexp</span> );
+<span class="src-keyword">static</span> <span class="src-type">int</span>  <span class="src-function-name">matchMeta</span>  ( <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">rexp</span>, <span class="src-type">int</span>   <span class="src-variable-name">chr</span> );
+<span class="src-keyword">static</span> <span class="src-type">int</span>  <span class="src-function-name">matchText</span>  ( <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">rexp</span>, <span class="src-type">char</span> *<span class="src-variable-name">txt</span> );
+
+<span class="src-keyword">static</span> <span class="src-type">int</span>  <span class="src-function-name">walkMeta</span>       ( <span class="src-type">char</span> *<span class="src-variable-name">str</span> );
+<span class="src-keyword">static</span> <span class="src-type">int</span>  <span class="src-function-name">walkSet</span>        ( <span class="src-type">char</span> *<span class="src-variable-name">str</span>, <span class="src-type">int</span> <span class="src-variable-name">len</span> );
+<span class="src-keyword">static</span> <span class="src-type">int</span>  <span class="src-function-name">countCharDigits</span>( <span class="src-type">char</span> *<span class="src-variable-name">str</span> );
+
+<span class="src-type">unsigned</span> <span class="src-type">int</span> <span class="src-function-name">regexp3</span>( <span class="src-type">char</span> *<span class="src-variable-name">txt</span>, <span class="src-type">char</span> *<span class="src-variable-name">re</span> ){
+  <span class="src-keyword">struct</span> <span class="src-type">RE</span>    <span class="src-variable-name">rexp</span>;
+  rexp.ptr     = re;
+  rexp.type    = PATH;
+  rexp.len     = strlen( re );
+  text.len     = strlen( txt );
+
+  <span class="src-keyword">if</span>( text.len == 0 || rexp.len == 0 ) <span class="src-keyword">return</span> 0;
+
+  <span class="src-type">int</span> <span class="src-variable-name">result</span>   = 0;
+  <span class="src-keyword">for</span>( <span class="src-type">int</span> <span class="src-variable-name">forward</span>, <span class="src-variable-name">i</span> = 0, <span class="src-variable-name">loops</span> = text.len; i &lt; loops; i += forward ){
+    forward    = 1;
+    text.pos   = 0;
+    text.ptr   = txt   + i;
+    text.len   = loops - i;
+
+    <span class="src-keyword">if</span>( walker( rexp ) ){
+      result++;
+      <span class="src-keyword">if</span>( text.pos &gt; 0 ) forward = text.pos;
+    }
+  }
+
+  <span class="src-keyword">return</span> result;
+}
+
+<span class="src-keyword">static</span> <span class="src-type">int</span> <span class="src-function-name">walker</span>( <span class="src-keyword">struct</span> <span class="src-type">RE</span> <span class="src-variable-name">rexp</span> ){
+  <span class="src-keyword">struct</span> <span class="src-type">RE</span> <span class="src-variable-name">track</span>;
+  <span class="src-keyword">for</span>( <span class="src-keyword">const</span> <span class="src-type">int</span> <span class="src-variable-name">oPos</span> = text.pos; trackByType( &amp;rexp, &amp;track, PATH ); text.pos = oPos )
+    <span class="src-keyword">if</span>( trekking( &amp;track ) ) <span class="src-keyword">return</span> TRUE;
+
+  <span class="src-keyword">return</span> FALSE;
+}
+
+<span class="src-keyword">static</span> <span class="src-type">int</span> <span class="src-function-name">trekking</span>( <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">rexp</span> ){
+  <span class="src-keyword">struct</span> <span class="src-type">RE</span> <span class="src-variable-name">track</span>;
+  <span class="src-keyword">while</span>( tracker( rexp, &amp;track ) )
+    <span class="src-keyword">if</span>( looper( &amp;track ) == FALSE ) <span class="src-keyword">return</span> FALSE;
+
+  <span class="src-keyword">return</span> TRUE;
+}
+
+<span class="src-keyword">static</span> <span class="src-type">int</span> <span class="src-function-name">looper</span>( <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">rexp</span> ){
+  <span class="src-type">int</span> <span class="src-variable-name">forward</span>, <span class="src-variable-name">loops</span> = 0;
+
+  <span class="src-keyword">switch</span>( rexp-&gt;type ){
+  <span class="src-keyword">case</span> HOOK: <span class="src-keyword">case</span> GROUP: <span class="src-keyword">case</span> PATH:
+    <span class="src-keyword">while</span>( loops &lt; rexp-&gt;loopsMax &amp;&amp; walker( *rexp ) )
+      loops++;
+    <span class="src-keyword">break</span>;
+  <span class="src-keyword">case</span> SET: <span class="src-keyword">case</span> BACKREF: <span class="src-keyword">case</span> META: <span class="src-keyword">case</span> RANGEAB: <span class="src-keyword">case</span> POINT: <span class="src-keyword">case</span> SIMPLE:
+    <span class="src-keyword">while</span>( loops &lt; rexp-&gt;loopsMax &amp;&amp; text.pos &lt; text.len &amp;&amp; (forward = match( rexp )) ){
+      text.pos += forward;
+      loops++;
+    }
+  }
+
+  <span class="src-keyword">return</span> loops &lt; rexp-&gt;loopsMin ? FALSE : TRUE;
+}
+
+<span class="src-keyword">static</span> <span class="src-type">int</span> <span class="src-function-name">trackByType</span>( <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">rexp</span>, <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">track</span>, <span class="src-type">int</span> <span class="src-variable-name">type</span> ){
+  <span class="src-keyword">if</span>( rexp-&gt;len == 0 ) <span class="src-keyword">return</span> FALSE;
+
+  *track = *rexp;
+  track-&gt;type = type;
+
+  <span class="src-keyword">for</span>( <span class="src-type">int</span> <span class="src-variable-name">cut</span>, <span class="src-variable-name">i</span> = 0, <span class="src-variable-name">deep</span> = 0; (i += walkMeta( rexp-&gt;ptr + i )) &lt; rexp-&gt;len; i++ ){
+    <span class="src-keyword">switch</span>( rexp-&gt;ptr[ i ] ){
+    <span class="src-keyword">case</span> <span class="src-string">'('</span>: <span class="src-keyword">case</span> <span class="src-string">'&lt;'</span>: deep++; <span class="src-keyword">break</span>;
+    <span class="src-keyword">case</span> <span class="src-string">')'</span>: <span class="src-keyword">case</span> <span class="src-string">'&gt;'</span>: deep--; <span class="src-keyword">break</span>;
+    <span class="src-keyword">case</span> <span class="src-string">'['</span>: i += walkSet( rexp-&gt;ptr + i, rexp-&gt;len - i ); <span class="src-keyword">break</span>;
+    }
+
+    <span class="src-keyword">switch</span>( type ){
+    <span class="src-keyword">case</span> HOOK    : cut = deep == 0; <span class="src-keyword">break</span>;
+    <span class="src-keyword">case</span> GROUP   : cut = deep == 0; <span class="src-keyword">break</span>;
+    <span class="src-keyword">case</span> SET     : cut =              rexp-&gt;ptr[i] == <span class="src-string">']'</span>; <span class="src-keyword">break</span>;
+    <span class="src-keyword">case</span> PATH    : cut = deep == 0 &amp;&amp; rexp-&gt;ptr[i] == <span class="src-string">'|'</span>; <span class="src-keyword">break</span>;
+    }
+
+    <span class="src-keyword">if</span>( cut ){
+      track-&gt;len  = i;
+      fwrRexp( rexp, i + 1 );
+      <span class="src-keyword">if</span>( type != PATH ) fwrRexp( track, 1 );
+      <span class="src-keyword">return</span> TRUE;
+    }
+  }
+
+  fwrRexp( rexp, rexp-&gt;len );
+  <span class="src-keyword">return</span> TRUE;
+}
+
+<span class="src-keyword">static</span> <span class="src-type">int</span> <span class="src-function-name">tracker</span>( <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">rexp</span>, <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">track</span> ){
+  <span class="src-keyword">if</span>( rexp-&gt;len == 0 ) <span class="src-keyword">return</span> FALSE;
+
+  <span class="src-keyword">switch</span>( *rexp-&gt;ptr ){
+  <span class="src-keyword">case</span> <span class="src-string">':'</span>: trackByLen ( rexp, track, 2, META  ); <span class="src-keyword">break</span>;
+  <span class="src-keyword">case</span> <span class="src-string">'.'</span>: trackByLen ( rexp, track, 1, POINT ); <span class="src-keyword">break</span>;
+  <span class="src-keyword">case</span> <span class="src-string">'('</span>: trackByType( rexp, track,    GROUP ); <span class="src-keyword">break</span>;
+  <span class="src-keyword">case</span> <span class="src-string">'&lt;'</span>: trackByType( rexp, track,    HOOK  ); <span class="src-keyword">break</span>;
+  <span class="src-keyword">case</span> <span class="src-string">'['</span>: trackByType( rexp, track,    SET   ); <span class="src-keyword">break</span>;
+  <span class="src-keyword">default</span> :
+    <span class="src-keyword">for</span>( <span class="src-type">int</span> <span class="src-variable-name">i</span> = 1; i &lt; rexp-&gt;len; i++ )
+      <span class="src-keyword">switch</span>( rexp-&gt;ptr[ i ] ){
+      <span class="src-keyword">case</span> <span class="src-string">'('</span>: <span class="src-keyword">case</span> <span class="src-string">'&lt;'</span>: <span class="src-keyword">case</span> <span class="src-string">'['</span>: <span class="src-keyword">case</span> <span class="src-string">':'</span>: <span class="src-keyword">case</span> <span class="src-string">'.'</span>:
+        trackByLen( rexp, track, i, SIMPLE  ); <span class="src-keyword">goto</span> <span class="src-constant">getL</span>;
+      <span class="src-keyword">case</span> <span class="src-string">'?'</span>: <span class="src-keyword">case</span> <span class="src-string">'+'</span>: <span class="src-keyword">case</span> <span class="src-string">'*'</span>: <span class="src-keyword">case</span> <span class="src-string">'{'</span>: <span class="src-keyword">case</span> <span class="src-string">'-'</span>:
+        <span class="src-keyword">if</span>( i == 1 ){
+          <span class="src-keyword">if</span>( rexp-&gt;ptr[i] == <span class="src-string">'-'</span> ) trackByLen( rexp, track, 3, RANGEAB );
+          <span class="src-keyword">else</span>                      trackByLen( rexp, track, 1, SIMPLE  );
+        } <span class="src-keyword">else</span>                      trackByLen( rexp, track, i - 1, SIMPLE  );
+        <span class="src-keyword">goto</span> <span class="src-constant">getL</span>;
+      }
+
+    trackByLen( rexp, track, rexp-&gt;len, SIMPLE  );
+  }
+
+ <span class="src-constant">getL</span>:
+  getLoops( rexp, track );
+  <span class="src-keyword">return</span> TRUE;
+}
+
+<span class="src-keyword">static</span> <span class="src-type">void</span> <span class="src-function-name">trackByLen</span>( <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">rexp</span>, <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">track</span>, <span class="src-type">int</span> <span class="src-variable-name">len</span>, <span class="src-type">int</span> <span class="src-variable-name">type</span> ){
+  *track       = *rexp;
+  track-&gt;type  = type;
+  track-&gt;len   = len;
+  fwrRexp( rexp, len );
+}
+
+
+<span class="src-keyword">static</span> <span class="src-type">void</span> <span class="src-function-name">fwrRexp</span>( <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">rexp</span>, <span class="src-type">int</span> <span class="src-variable-name">len</span> ){
+  rexp-&gt;ptr += len; rexp-&gt;len -= len;
+}
+
+<span class="src-keyword">static</span> <span class="src-type">int</span> <span class="src-function-name">walkSet</span>( <span class="src-type">char</span> *<span class="src-variable-name">str</span>, <span class="src-type">int</span> <span class="src-variable-name">len</span> ){
+  <span class="src-keyword">for</span>( <span class="src-type">int</span> <span class="src-variable-name">i</span> = 0; (i += walkMeta( str + i )) &lt; len; i++ )
+    <span class="src-keyword">if</span>( str[i] == <span class="src-string">']'</span> ) <span class="src-keyword">return</span> i;
+
+  <span class="src-keyword">return</span> len;
+}
+
+<span class="src-keyword">static</span> <span class="src-type">int</span> <span class="src-function-name">walkMeta</span>( <span class="src-type">char</span> *<span class="src-variable-name">str</span> ){
+  <span class="src-keyword">for</span>( <span class="src-type">int</span> <span class="src-variable-name">i</span> = 0; ; i += 2 )
+    <span class="src-keyword">if</span>( str[i] != <span class="src-string">':'</span> ) <span class="src-keyword">return</span> i;
+}
+
+<span class="src-keyword">static</span> <span class="src-type">void</span> <span class="src-function-name">getLoops</span>( <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">rexp</span>, <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">track</span> ){
+  track-&gt;loopsMin = 1; track-&gt;loopsMax = 1;
+
+  <span class="src-keyword">if</span>( rexp-&gt;len )
+    <span class="src-keyword">switch</span>( *rexp-&gt;ptr ){
+    <span class="src-keyword">case</span> <span class="src-string">'?'</span> : track-&gt;loopsMin = 0; track-&gt;loopsMax =   1; fwrRexp( rexp, 1 ); <span class="src-keyword">return</span>;
+    <span class="src-keyword">case</span> <span class="src-string">'+'</span> : track-&gt;loopsMin = 1; track-&gt;loopsMax = INF; fwrRexp( rexp, 1 ); <span class="src-keyword">return</span>;
+    <span class="src-keyword">case</span> <span class="src-string">'*'</span> : track-&gt;loopsMin = 0; track-&gt;loopsMax = INF; fwrRexp( rexp, 1 ); <span class="src-keyword">return</span>;
+    <span class="src-keyword">case</span> <span class="src-string">'{'</span> : fwrRexp( rexp, 1 );
+      track-&gt;loopsMin = atoi( rexp-&gt;ptr );
+      fwrRexp( rexp, countCharDigits( rexp-&gt;ptr ) );
+      <span class="src-keyword">if</span>( *rexp-&gt;ptr == <span class="src-string">','</span> ){
+        fwrRexp( rexp, 1 );
+        <span class="src-keyword">if</span>( *rexp-&gt;ptr == <span class="src-string">'}'</span> )
+          track-&gt;loopsMax = INF;
+        <span class="src-keyword">else</span> {
+          track-&gt;loopsMax = atoi( rexp-&gt;ptr );
+          fwrRexp( rexp, countCharDigits( rexp-&gt;ptr  ) );
+        }
+      } <span class="src-keyword">else</span> track-&gt;loopsMax = track-&gt;loopsMin;
+
+      fwrRexp( rexp, 1 );
+    }
+}
+
+<span class="src-keyword">static</span> <span class="src-type">int</span> <span class="src-function-name">countCharDigits</span>( <span class="src-type">char</span> *<span class="src-variable-name">str</span> ){
+  <span class="src-keyword">for</span>( <span class="src-type">int</span> <span class="src-variable-name">digits</span> = 0; ; digits++ )
+    <span class="src-keyword">if</span>( isdigit( *str++ ) == 0 ) <span class="src-keyword">return</span> digits;
+}
+
+<span class="src-keyword">static</span> <span class="src-type">int</span> <span class="src-function-name">match</span>( <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">rexp</span> ){
+  <span class="src-keyword">switch</span>( rexp-&gt;type ){
+  <span class="src-keyword">case</span> POINT  : <span class="src-keyword">return</span> text.pos &lt; text.len;
+  <span class="src-keyword">case</span> RANGEAB: <span class="src-keyword">return</span> text.ptr[ text.pos ] &gt;= rexp-&gt;ptr[ 0 ] &amp;&amp;
+                       text.ptr[ text.pos ] &lt;= rexp-&gt;ptr[ 2 ];
+  <span class="src-keyword">case</span> SET    : <span class="src-keyword">return</span> matchSet ( *rexp );
+  <span class="src-keyword">case</span> META   : <span class="src-keyword">return</span> matchMeta( rexp, text.ptr[text.pos]  );
+  <span class="src-keyword">default</span>     : <span class="src-keyword">return</span> matchText( rexp, text.ptr + text.pos );
+  }
+}
+
+<span class="src-keyword">static</span> <span class="src-type">int</span> <span class="src-function-name">matchText</span>( <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">rexp</span>, <span class="src-type">char</span> *<span class="src-variable-name">txt</span> ){
+  <span class="src-keyword">return</span> strncmp( txt, rexp-&gt;ptr, rexp-&gt;len )  == 0 ? rexp-&gt;len : 0;
+}
+
+<span class="src-keyword">static</span> <span class="src-type">int</span> <span class="src-function-name">matchMeta</span>( <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">rexp</span>, <span class="src-type">int</span> <span class="src-variable-name">chr</span> ){
+  <span class="src-keyword">switch</span>( rexp-&gt;ptr[1] ){
+  <span class="src-keyword">case</span> <span class="src-string">'a'</span> : <span class="src-keyword">return</span> isalpha( chr ) != 0;
+  <span class="src-keyword">case</span> <span class="src-string">'A'</span> : <span class="src-keyword">return</span> isalpha( chr ) == 0;
+  <span class="src-keyword">case</span> <span class="src-string">'d'</span> : <span class="src-keyword">return</span> isdigit( chr ) != 0;
+  <span class="src-keyword">case</span> <span class="src-string">'D'</span> : <span class="src-keyword">return</span> isdigit( chr ) == 0;
+  <span class="src-keyword">case</span> <span class="src-string">'w'</span> : <span class="src-keyword">return</span> isalnum( chr ) != 0;
+  <span class="src-keyword">case</span> <span class="src-string">'W'</span> : <span class="src-keyword">return</span> isalnum( chr ) == 0;
+  <span class="src-keyword">case</span> <span class="src-string">'s'</span> : <span class="src-keyword">return</span> isspace( chr ) != 0;
+  <span class="src-keyword">case</span> <span class="src-string">'S'</span> : <span class="src-keyword">return</span> isspace( chr ) == 0;
+  <span class="src-keyword">default</span>  : <span class="src-keyword">return</span> rexp-&gt;ptr[1] == chr;
+  }
+}
+
+<span class="src-keyword">static</span> <span class="src-type">char</span> * <span class="src-function-name">strnchr</span>( <span class="src-type">char</span> *<span class="src-variable-name">str</span>, <span class="src-type">int</span> <span class="src-variable-name">chr</span>, <span class="src-type">int</span> <span class="src-variable-name">n</span> ){
+  <span class="src-keyword">for</span>( <span class="src-type">int</span> <span class="src-variable-name">i</span> = 0; i &lt; n &amp;&amp; str[ i ]; i++ )
+    <span class="src-keyword">if</span>( str[ i ] == chr ) <span class="src-keyword">return</span> str + i;
+
+  <span class="src-keyword">return</span> 0;
+}
+
+<span class="src-keyword">static</span> <span class="src-type">int</span> <span class="src-function-name">matchSet</span>( <span class="src-keyword">struct</span> <span class="src-type">RE</span> <span class="src-variable-name">rexp</span> ){
+  <span class="src-keyword">struct</span> <span class="src-type">RE</span> <span class="src-variable-name">track</span>;
+  <span class="src-type">int</span> <span class="src-variable-name">result</span> = 0, <span class="src-variable-name">reverse</span> = *rexp.ptr == <span class="src-string">'^'</span>;
+
+  <span class="src-keyword">if</span>( reverse ) fwrRexp( &amp;rexp, 1 );
+
+  <span class="src-keyword">while</span>( tracker( &amp;rexp, &amp;track ) ){
+    <span class="src-keyword">switch</span>( track.type ){
+    <span class="src-keyword">case</span> RANGEAB: <span class="src-keyword">case</span> META: <span class="src-keyword">case</span> POINT:
+      result = match( &amp;track ); <span class="src-keyword">break</span>;
+    <span class="src-keyword">default</span>:
+      result = strnchr( track.ptr, text.ptr[ text.pos ], track.len  ) != 0;
+    }
+
+    <span class="src-keyword">if</span>( result ) <span class="src-keyword">return</span> reverse ? FALSE : result;
+  }
+
+  <span class="src-keyword">return</span> reverse ? TRUE : FALSE;
+}
+</pre>
+</div>
+
+<p>
+Primero, recompila, luego, realiza las pruebas&#x2026; todo 0K?
+</p>
+
+<p>
+Pasamos a examinar como se realizan los nuevos cortes en la funcion
+<code>tracker</code>:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-c"><span class="src-keyword">static</span> <span class="src-type">int</span> <span class="src-function-name">tracker</span>( <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">rexp</span>, <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">track</span> ){
+  <span class="src-keyword">if</span>( rexp-&gt;len == 0 ) <span class="src-keyword">return</span> FALSE;
+
+  <span class="src-keyword">switch</span>( *rexp-&gt;ptr ){                                    <span class="src-comment-delimiter">// </span><span class="src-comment">&#10122;</span>
+  <span class="src-keyword">case</span> <span class="src-string">':'</span>: trackByLen ( rexp, track, 2, META  ); <span class="src-keyword">break</span>;   <span class="src-comment-delimiter">// </span><span class="src-comment">&#10123;</span>
+  <span class="src-keyword">case</span> <span class="src-string">'.'</span>: trackByLen ( rexp, track, 1, POINT ); <span class="src-keyword">break</span>;   <span class="src-comment-delimiter">// </span><span class="src-comment">&#10124;</span>
+  <span class="src-keyword">case</span> <span class="src-string">'('</span>: trackByType( rexp, track,    GROUP ); <span class="src-keyword">break</span>;
+  <span class="src-keyword">case</span> <span class="src-string">'&lt;'</span>: trackByType( rexp, track,    HOOK  ); <span class="src-keyword">break</span>;
+  <span class="src-keyword">case</span> <span class="src-string">'['</span>: trackByType( rexp, track,    SET   ); <span class="src-keyword">break</span>;   <span class="src-comment-delimiter">// </span><span class="src-comment">&#10125;</span>
+  <span class="src-keyword">default</span> :
+    <span class="src-keyword">for</span>( <span class="src-type">int</span> <span class="src-variable-name">i</span> = 1; i &lt; rexp-&gt;len; i++ )
+      <span class="src-keyword">switch</span>( rexp-&gt;ptr[ i ] ){
+      <span class="src-keyword">case</span> <span class="src-string">'('</span>: <span class="src-keyword">case</span> <span class="src-string">'&lt;'</span>: <span class="src-keyword">case</span> <span class="src-string">'['</span>: <span class="src-keyword">case</span> <span class="src-string">':'</span>: <span class="src-keyword">case</span> <span class="src-string">'.'</span>:    <span class="src-comment-delimiter">// </span><span class="src-comment">&#10126;</span>
+        trackByLen( rexp, track, i, SIMPLE  ); <span class="src-keyword">goto</span> <span class="src-constant">getL</span>;
+      <span class="src-keyword">case</span> <span class="src-string">'?'</span>: <span class="src-keyword">case</span> <span class="src-string">'+'</span>: <span class="src-keyword">case</span> <span class="src-string">'*'</span>: <span class="src-keyword">case</span> <span class="src-string">'{'</span>: <span class="src-keyword">case</span> <span class="src-string">'-'</span>:    <span class="src-comment-delimiter">// </span><span class="src-comment">&#10127;</span>
+        <span class="src-keyword">if</span>( i == 1 ){                                      <span class="src-comment-delimiter">// </span><span class="src-comment">&#10128;</span>
+          <span class="src-keyword">if</span>( rexp-&gt;ptr[i] == <span class="src-string">'-'</span> ) trackByLen( rexp, track, 3, RANGEAB );      <span class="src-comment-delimiter">// </span><span class="src-comment">&#10129;</span>
+          <span class="src-keyword">else</span>                      trackByLen( rexp, track, 1, SIMPLE  );      <span class="src-comment-delimiter">// </span><span class="src-comment">&#10130;</span>
+        } <span class="src-keyword">else</span>                      trackByLen( rexp, track, i - 1, SIMPLE  );  <span class="src-comment-delimiter">// </span><span class="src-comment">&#10131;</span>
+        <span class="src-keyword">goto</span> <span class="src-constant">getL</span>;
+      }
+
+    trackByLen( rexp, track, rexp-&gt;len, SIMPLE  );
+  }
+
+ <span class="src-constant">getL</span>:
+  getLoops( rexp, track );
+  <span class="src-keyword">return</span> TRUE;
+}
+</pre>
+</div>
+
+<p>
+El <code>switch</code> principal ➊ no oculta su proposito, cada caso muestra de forma
+evidente nuestra intencion. Conocemos la sintaxis del constructor, la
+constante que prepresenta su tipo y la accion: cortar por longitud
+(<code>trackByLen</code>) o por tipo (<code>trackByType</code>). Los nuevos constructores no
+son una exepcion ➋➌➍.
+</p>
+
+<p>
+(Recuerda que la sintaxis de <code>regexp3</code> difiere de la de otros motores, los
+metacaracteres no inician con el prefijo <code>\</code>, en su lugar se utiliza <code>:</code>)
+</p>
+
+<p>
+Σ(-᷅_-᷄๑) ? Bueno el caso <code>default</code> no es tan claro como el resto, sobre
+todo porque aqui es donde se realiza el corte de los rangos, pero veremos
+que no es inaccesible.
+</p>
+
+<p>
+Agregamos los operadores <code>:</code> y <code>.</code> al codigo que establece el limite de
+la seccion de caracteres ➎
+</p>
+
+<p>
+Gestionar el corte de los rangos requiere otro enfoque, aunque no es muy
+distinto al de los cuntificadores, asi que ponemos el caso junto a estos ➏.
+</p>
+
+<p>
+Si aparece una exprecion como esta
+</p>
+
+<pre class="example">
+abc1-9
+</pre>
+
+<p>
+hasta donde abarca la seccion <code>SIMPLE</code>? Del caracter <code>a</code> al caracter
+<code>c</code>, o lo que es lo mismo, la posicion del operador <code>-</code> menos <span class="math">1</span> ➓.
+</p>
+
+<p>
+en la siguiente iteracion quedaria
+</p>
+
+<pre class="example">
+1-9
+</pre>
+
+<p>
+cuando el operador <code>-</code> esta en la posicion <span class="math">1</span> ➐ la seccion abarca tres
+caracteres ➑. Para la misma posicion, si el operador no es <code>-</code>, significa
+que tenemos un cuantificador, asi que la seccion afecta a un solo caracter
+➒.
+</p>
+
+<p>
+La inclusion de los metacaracteres obliga a tomar consideraciones extra
+cuado se analiza el contenido de la expresion, de otra forma expresiones
+como
+</p>
+
+<pre class="example">
+:||:a
+</pre>
+
+<p>
+o
+</p>
+
+<pre class="example">
+(abc:))
+</pre>
+
+<p>
+o
+</p>
+
+<pre class="example">
+:[[123]
+</pre>
+
+<p>
+provocarian resultados erroneos y en el peor de los casos, un error de
+segmentacion si se recorrer el arreglo que contiene la expresion, mas alla de su
+limite.
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-c"><span class="src-keyword">static</span> <span class="src-type">int</span> <span class="src-function-name">trackByType</span>( <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">rexp</span>, <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">track</span>, <span class="src-type">int</span> <span class="src-variable-name">type</span> ){
+  <span class="src-keyword">if</span>( rexp-&gt;len == 0 ) <span class="src-keyword">return</span> FALSE;
+
+  *track = *rexp;
+  track-&gt;type = type;
+
+  <span class="src-keyword">for</span>( <span class="src-type">int</span> <span class="src-variable-name">cut</span>, <span class="src-variable-name">i</span> = 0, <span class="src-variable-name">deep</span> = 0; (i += walkMeta( rexp-&gt;ptr + i )) &lt; rexp-&gt;len; i++ ){ <span class="src-comment-delimiter">// </span><span class="src-comment">&#10122;</span>
+    <span class="src-keyword">switch</span>( rexp-&gt;ptr[ i ] ){
+    <span class="src-keyword">case</span> <span class="src-string">'('</span>: <span class="src-keyword">case</span> <span class="src-string">'&lt;'</span>: deep++; <span class="src-keyword">break</span>;
+    <span class="src-keyword">case</span> <span class="src-string">')'</span>: <span class="src-keyword">case</span> <span class="src-string">'&gt;'</span>: deep--; <span class="src-keyword">break</span>;
+    <span class="src-keyword">case</span> <span class="src-string">'['</span>: i += walkSet( rexp-&gt;ptr + i, rexp-&gt;len - i ); <span class="src-keyword">break</span>;                    <span class="src-comment-delimiter">// </span><span class="src-comment">&#10123;</span>
+    }
+
+    <span class="src-keyword">switch</span>( type ){
+    <span class="src-keyword">case</span> HOOK    : cut = deep == 0; <span class="src-keyword">break</span>;
+    <span class="src-keyword">case</span> GROUP   : cut = deep == 0; <span class="src-keyword">break</span>;
+    <span class="src-keyword">case</span> SET     : cut =              rexp-&gt;ptr[i] == <span class="src-string">']'</span>; <span class="src-keyword">break</span>;                     <span class="src-comment-delimiter">// </span><span class="src-comment">&#10124;</span>
+    <span class="src-keyword">case</span> PATH    : cut = deep == 0 &amp;&amp; rexp-&gt;ptr[i] == <span class="src-string">'|'</span>; <span class="src-keyword">break</span>;
+    }
+
+    <span class="src-keyword">if</span>( cut ){
+      track-&gt;len  = i;
+      fwrRexp( rexp, i + 1 );
+      <span class="src-keyword">if</span>( type != PATH ) fwrRexp( track, 1 );
+      <span class="src-keyword">return</span> TRUE;
+    }
+  }
+
+  fwrRexp( rexp, rexp-&gt;len );
+  <span class="src-keyword">return</span> TRUE;
+}
+</pre>
+</div>
+
+<p>
+La funcion <code>walkMeta</code> ➊ regresa el numero de caracteres consecutivos con
+<q>apariencia</q> de metacaracter. Desde luego, su ubicacion dentro de la
+condicion del bucle <code>for</code> no es accidental, sumamos la cantidad de
+metacaracteres a la ubicacion actual y luego se comprueba que sigamos dentro
+de la expresion (comparacion con <code>rexp-&gt;len</code>).
+</p>
+
+<p>
+Ya dentro del bucle, no hay metacaracteres que interfieran o confundan la
+validez de los operadores a evaluar&#x2026; a menos que crusemos el inospito
+territorio del constructor conocido como <em>conjunto</em> (recondemos que dentro de
+un conjunto signos como <code>(</code>, <code>)</code>, <code>|</code>, <code>?</code>, etc. no necesitan
+escaparse), la solucion? algo similar a <code>walkMeta</code>, en este caso la
+funcion se llama <code>walkSet</code> ➋.
+</p>
+
+<p>
+<code>walkSet</code> a diferencia de <code>walkMeta</code>, regresa la <em>posicion de cierre</em>
+del constructor, que deberia corresponderse con el operador <code>]</code>. Opera de
+esta forma para coincidir con la forma en que se realiza el corte de las
+agrupaciones <code>SET</code> ➌, con lo que el codigo que realiza el corte no
+requiere ninguna modificacion.
+</p>
+
+<p>
+Aqui estan las definicion de <code>walkMeta</code> y <code>walkSet</code>
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-c"><span class="src-keyword">static</span> <span class="src-type">int</span> <span class="src-function-name">walkSet</span>( <span class="src-type">char</span> *<span class="src-variable-name">str</span>, <span class="src-type">int</span> <span class="src-variable-name">len</span> ){
+  <span class="src-keyword">for</span>( <span class="src-type">int</span> <span class="src-variable-name">i</span> = 0; (i += walkMeta( str + i )) &lt; len; i++ )
+    <span class="src-keyword">if</span>( str[i] == <span class="src-string">']'</span> ) <span class="src-keyword">return</span> i;
+
+  <span class="src-keyword">return</span> len;
+}
+
+<span class="src-keyword">static</span> <span class="src-type">int</span> <span class="src-function-name">walkMeta</span>( <span class="src-type">char</span> *<span class="src-variable-name">str</span> ){
+  <span class="src-keyword">for</span>( <span class="src-type">int</span> <span class="src-variable-name">i</span> = 0; ; i += 2 )
+    <span class="src-keyword">if</span>( str[i] != <span class="src-string">':'</span> ) <span class="src-keyword">return</span> i;
+}
+</pre>
+</div>
+
+<p>
+Primero <code>walkMeta</code>. La funcion aunque un poco rebuscada, dice, si la
+posicion actual tiene una sintaxis de metacaracter (es igual a <code>:</code>) avanza
+a la siguiente posicion (<code>i += 2</code>) de otra forma regresa la posicion
+actual. Simple y eficaz! amenos que nos envien una expresion como
+</p>
+
+<pre class="example">
+:a:b:
+</pre>
+
+<p>
+donde el ultimo <code>:</code> probocaria la revision de un indice fuera de los
+limites del arreglo&#x2026;
+</p>
+
+<p>
+Veamos <code>walkSet</code>. Esquivamos los metacacteres y si encontramos el operador
+de cierre regresamos su posicion. Como medida preventiva, si termina el
+bucle sin coincidencia, regresamos la longitud de la seccion, de hay la
+variable <code>len</code>.
+</p>
+
+<p>
+En alguna version <code>walkSet</code> tenia este aspecto
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-c"><span class="src-keyword">static</span> <span class="src-type">int</span> <span class="src-function-name">walkSet</span>( <span class="src-type">char</span> *<span class="src-variable-name">str</span> ){
+  <span class="src-type">int</span> <span class="src-variable-name">i</span> = 0;
+  <span class="src-keyword">while</span>( TRUE )
+    <span class="src-keyword">switch</span>( str[ i ] ){
+    <span class="src-keyword">case</span> <span class="src-string">']'</span>: <span class="src-keyword">return</span> i;
+    <span class="src-keyword">case</span> <span class="src-string">':'</span>: i += 2; <span class="src-keyword">break</span>;
+    <span class="src-keyword">default</span> :    i++; <span class="src-keyword">break</span>;
+    }
+}
+</pre>
+</div>
+
+<p>
+funcionaba? claro, incluso era mas eficiente, en fin, un poco de seguridad
+tampoco biene mal.
+</p>
+
+<p>
+En este punto ya tenemos los nuevos constructores, necesario es
+confrontarlos con el contenido de la cadena.
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-c"><span class="src-keyword">static</span> <span class="src-type">int</span> <span class="src-function-name">looper</span>( <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">rexp</span> ){
+  <span class="src-type">int</span> <span class="src-variable-name">forward</span>, <span class="src-variable-name">loops</span> = 0;
+
+  <span class="src-keyword">switch</span>( rexp-&gt;type ){
+  <span class="src-keyword">case</span> HOOK: <span class="src-keyword">case</span> GROUP: <span class="src-keyword">case</span> PATH:
+    <span class="src-keyword">while</span>( loops &lt; rexp-&gt;loopsMax &amp;&amp; walker( *rexp ) )
+      loops++;
+    <span class="src-keyword">break</span>;
+  <span class="src-keyword">case</span> SET: <span class="src-keyword">case</span> BACKREF: <span class="src-keyword">case</span> META: <span class="src-keyword">case</span> RANGEAB: <span class="src-keyword">case</span> POINT: <span class="src-keyword">case</span> SIMPLE:
+    <span class="src-keyword">while</span>( loops &lt; rexp-&gt;loopsMax &amp;&amp; text.pos &lt; text.len &amp;&amp; (forward = match( rexp )) ){
+      text.pos += forward;
+      loops++;
+    }
+  }
+
+  <span class="src-keyword">return</span> loops &lt; rexp-&gt;loopsMin ? FALSE : TRUE;
+}
+</pre>
+</div>
+
+<p>
+tres cosas cambian en <code>looper</code>
+</p>
+
+<ol class="org-ol">
+<li>se declara la variable <code>forward</code>,
+</li>
+
+<li><code>forward</code> se establece con el valor devuelto por <code>match</code>, que regresa
+el numero de caracteres que coinciden (verdadero) o 0 (falso)
+</li>
+
+<li>movemos la posicion de la cadena los <span class="math">n</span> caracteres que coinciden
+</li>
+</ol>
+
+
+<p>
+mientras tanto <code>match</code> adquiere nuevos poderes
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-c"><span class="src-keyword">static</span> <span class="src-type">int</span> <span class="src-function-name">match</span>( <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">rexp</span> ){
+  <span class="src-keyword">switch</span>( rexp-&gt;type ){
+  <span class="src-keyword">case</span> POINT  : <span class="src-keyword">return</span> text.pos &lt; text.len;                        <span class="src-comment-delimiter">// </span><span class="src-comment">&#10122;</span>
+  <span class="src-keyword">case</span> RANGEAB: <span class="src-keyword">return</span> text.ptr[ text.pos ] &gt;= rexp-&gt;ptr[ 0 ] &amp;&amp;   <span class="src-comment-delimiter">// </span><span class="src-comment">&#10123;</span>
+                       text.ptr[ text.pos ] &lt;= rexp-&gt;ptr[ 2 ];
+  <span class="src-keyword">case</span> SET    : <span class="src-keyword">return</span> matchSet ( *rexp );                         <span class="src-comment-delimiter">// </span><span class="src-comment">&#10124;</span>
+  <span class="src-keyword">case</span> META   : <span class="src-keyword">return</span> matchMeta( rexp, text.ptr[text.pos]  );     <span class="src-comment-delimiter">// </span><span class="src-comment">&#10125;</span>
+  <span class="src-keyword">default</span>     : <span class="src-keyword">return</span> matchText( rexp, text.ptr + text.pos );     <span class="src-comment-delimiter">// </span><span class="src-comment">&#10126;</span>
+  }
+}
+</pre>
+</div>
+
+
+<p>
+(」゜ロ゜)」 momento! en <code>looper</code> ya conociamos el tipo de constructor, efectuar
+un <code>switch</code> adicional, dentro de <code>match</code> no es redundante?
+</p>
+
+<p>
+[-┏ω┓-] quiza, sin enbargo colocar codigo en cada caso de <code>looper</code> al
+estilo:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-c"><span class="src-keyword">while</span>( loops &lt; rexp-&gt;loopsMax &amp;&amp; text.pos &lt; text.len &amp;&amp; (steps = matchXXXX( rexp )) ){
+  text.pos += steps;
+  loops++;
+ }
+</pre>
+</div>
+
+<p>
+donde <code>matchXXXX</code> es la llamada especializada de cada costructor, me
+parece exesivo, ademas segun una prueba para ver el rendimiento, la llamada
+<q>intermedia</q> a <code>match</code> y su <code>switch</code> ofrecen un mejor desempeño
+respecto a la velocidad.
+</p>
+
+<p>
+Resuelto el dilema, analicemos el primer caso. En nuestro motor <code>POINT</code>
+coincide con cualquier caracter, por lo tanto si no se ha alcanzado el final
+de la cadena, tenemos una coincidencia ➊.
+</p>
+
+<p>
+Los rangos, faciles tambien son ➋. Mediante una evaluacion booleana
+comprobamos que el valor del caracter en la posicion actual de la cadena sea
+mayor o igual al limite inferior del rango (primer elemento del rango,
+indice 0) y a su vez menor o igual al limite superior (tercer elemento del
+rango, indice 2). Recordemos que la cadena que define un rango de caracteres
+esta forrmada por tres caracters y el segundo elemento es el signo <code>-</code>.
+</p>
+
+<p>
+ʕ´•ᴥ•`ʔ y para este constructor no veficamos antes, estar dentro del limite
+da la cadena?
+</p>
+
+<p>
+＼_(￣、￣ 彡 ￣ー￣)_／ －☆・　・　・　‥……━━● (magia) no esperaba menos, en
+efecto, podriamos colocar un <code>if</code> antes del <code>switch</code> que verifique el
+limite. y una instruccion <code>return FALSE</code> al final de la funcion&#x2026; o
+dentro de <code>looper</code> ☜(ﾟ∀ﾟ✌) colocar esta condicion antes de realizar la
+cosulta, como hemos venido haciendo desde que aparecio <code>match</code> en el
+codigo.
+</p>
+
+<p>
+Por orden de complejidad, seguiria el caso <code>default</code> donde cae la busqueda
+de texto, tal cual aparece en el constructor:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-c"><span class="src-keyword">static</span> <span class="src-type">int</span> <span class="src-function-name">matchText</span>( <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">rexp</span>, <span class="src-type">char</span> *<span class="src-variable-name">txt</span> ){
+  <span class="src-keyword">return</span> strncmp( txt, rexp-&gt;ptr, rexp-&gt;len )  == 0 ? rexp-&gt;len : 0;
+}
+</pre>
+</div>
+
+<p>
+en esencia es el <code>match</code> de la seccion previa con un nombre distinto. Se
+emplea <code>defualt</code> en lugar de <code>SIMPLE</code> para suprimir advertencias del
+compilador.
+</p>
+
+<p>
+Continuemos con los metacaracteres
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-c"><span class="src-keyword">static</span> <span class="src-type">int</span> <span class="src-function-name">matchMeta</span>( <span class="src-keyword">struct</span> <span class="src-type">RE</span> *<span class="src-variable-name">rexp</span>, <span class="src-type">int</span> <span class="src-variable-name">chr</span> ){
+  <span class="src-keyword">switch</span>( rexp-&gt;ptr[1] ){                 <span class="src-comment-delimiter">// </span><span class="src-comment">&#10122;</span>
+  <span class="src-keyword">case</span> <span class="src-string">'a'</span> : <span class="src-keyword">return</span> isalpha( chr ) != 0;  <span class="src-comment-delimiter">// </span><span class="src-comment">&#10123;</span>
+  <span class="src-keyword">case</span> <span class="src-string">'A'</span> : <span class="src-keyword">return</span> isalpha( chr ) == 0;  <span class="src-comment-delimiter">// </span><span class="src-comment">&#10124;</span>
+  <span class="src-keyword">case</span> <span class="src-string">'d'</span> : <span class="src-keyword">return</span> isdigit( chr ) != 0;  <span class="src-comment-delimiter">// </span><span class="src-comment">&#10125;</span>
+  <span class="src-keyword">case</span> <span class="src-string">'D'</span> : <span class="src-keyword">return</span> isdigit( chr ) == 0;  <span class="src-comment-delimiter">// </span><span class="src-comment">&#10126;</span>
+  <span class="src-keyword">case</span> <span class="src-string">'w'</span> : <span class="src-keyword">return</span> isalnum( chr ) != 0;  <span class="src-comment-delimiter">// </span><span class="src-comment">&#10127;</span>
+  <span class="src-keyword">case</span> <span class="src-string">'W'</span> : <span class="src-keyword">return</span> isalnum( chr ) == 0;  <span class="src-comment-delimiter">// </span><span class="src-comment">&#10128;</span>
+  <span class="src-keyword">case</span> <span class="src-string">'s'</span> : <span class="src-keyword">return</span> isspace( chr ) != 0;  <span class="src-comment-delimiter">// </span><span class="src-comment">&#10129;</span>
+  <span class="src-keyword">case</span> <span class="src-string">'S'</span> : <span class="src-keyword">return</span> isspace( chr ) == 0;  <span class="src-comment-delimiter">// </span><span class="src-comment">&#10130;</span>
+  <span class="src-keyword">default</span>  : <span class="src-keyword">return</span> rexp-&gt;ptr[1] == chr;  <span class="src-comment-delimiter">// </span><span class="src-comment">&#10131;</span>
+  }
+}
+</pre>
+</div>
+
+<p>
+En nuestro motor un meta caracter esta formado por dos caracteres, el
+indicador de metacaracter (<code>:</code>) y el metacaracter en si. El primer paso es
+averiguar el metacarater ➊, luego deacuerdo a el caso, realizamos una accion
+especifica segun los metacracteres que deseemos implementar. En esta
+implementacion son:
+</p>
+
+<ul class="org-ul">
+<li>(<code>a</code>) cualquier caracter en el rango a-z o A-Z ➋.
+</li>
+<li>(<code>A</code>) cualquier caracter que no este en el rango a-z o A-Z ➌.
+</li>
+<li>(<code>d</code>) cualquier caracter en el rango 0-9 ➍.
+</li>
+<li>(<code>D</code>) cualquier carácter que no este en el rango 0-9 ➎.
+</li>
+<li>(<code>w</code>) cualquier carácter alfanumérico ➏ (a-z, A-Z o 0-9, por motivos
+fuera de mi comprension, los motores de las grandes ligas tambien incluien
+como alfanumerico, el caracter <code>_</code>, regexp3 no sigue este comportamiento).
+</li>
+<li>(<code>W</code>) cualquier carácter no alfanumérico ➐.
+</li>
+<li>(<code>s</code>) cualquier caracter que sea un espacio en blanco ➑.
+</li>
+<li>(<code>S</code>) cualquier carácter que no sea un espacio en blanco ➒.
+</li>
+</ul>
+
+
+<p>
+Afortunadamente, la libreria <code>ctype</code> incluye funciones para evaluar estos
+casos. Lamentablemente el valor que retornan en caso de acierto es demasiado
+ambiguo, segun se lee en el manual
+</p>
+
+<blockquote>
+<p>
+Los valores devueltos son no-cero si el carácter cae dentro de la clase
+pedida, y cero si no.
+</p>
+</blockquote>
+
+<p>
+Es decir, exepto cuando el caracter no cae dentro de la clasificacion, nos
+puede regresar el valor que les venga en gana. Haran uso de un generador de
+numeros aleatorios y luego una verificacion de que el valor no sea cero para
+cumplir la especificacion? Ni idea. La solucion mas sencilla es aplicar una
+evaluacion booleana al retorno.
+</p>
+
+<p>
+Los casos no definidos (<code>(</code>, <code>)</code>, <code>[</code>, <code>]</code>, &#x2026;, etc.), se tratan
+como simples caracteres ➓.
+</p>
+
+<p>
+Por cierto, esta funcion (como el resto de las tipo <code>match</code>) regresa la
+cantidad de caracteres que coinciden, es decir, nos permite implementar
+metacaracteres que comparen mas de un caracter, podrian ser dos, tres o de
+la longitud que se nos ocurra, incluso si lo gestionamos bien expresiones
+regulares!
+</p>
+
+<p>
+Regresando a <code>match</code>, el caso <code>SET</code> para los constructores conjunto ➌,
+es de lejos el mas complejo. La expresion que almacena sigue sin procesar,
+sumado a esto, posee un modificador que no tiene ningun otro constructor,
+<em>la negacion</em>.
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-c"><span class="src-keyword">static</span> <span class="src-type">int</span> <span class="src-function-name">matchSet</span>( <span class="src-keyword">struct</span> <span class="src-type">RE</span> <span class="src-variable-name">rexp</span> ){               <span class="src-comment-delimiter">// </span><span class="src-comment">&#10122;</span>
+  <span class="src-keyword">struct</span> <span class="src-type">RE</span> <span class="src-variable-name">track</span>;
+  <span class="src-type">int</span> <span class="src-variable-name">result</span> = 0, <span class="src-variable-name">reverse</span> = *rexp.ptr == <span class="src-string">'^'</span>;        <span class="src-comment-delimiter">// </span><span class="src-comment">&#10123;</span>
+
+  <span class="src-keyword">if</span>( reverse ) fwrRexp( &amp;rexp, 1 );                 <span class="src-comment-delimiter">// </span><span class="src-comment">&#10124;</span>
+
+  <span class="src-keyword">while</span>( tracker( &amp;rexp, &amp;track ) ){                 <span class="src-comment-delimiter">// </span><span class="src-comment">&#10125;</span>
+    <span class="src-keyword">switch</span>( track.type ){
+    <span class="src-keyword">case</span> RANGEAB: <span class="src-keyword">case</span> META: <span class="src-keyword">case</span> POINT:
+      result = match( &amp;track ); <span class="src-keyword">break</span>;               <span class="src-comment-delimiter">// </span><span class="src-comment">&#10126;</span>
+    <span class="src-keyword">default</span>:
+      result = strnchr( track.ptr, text.ptr[ text.pos ], track.len  ) != 0;  <span class="src-comment-delimiter">// </span><span class="src-comment">&#10127;</span>
+    }
+
+    <span class="src-keyword">if</span>( result ) <span class="src-keyword">return</span> reverse ? FALSE : result;    <span class="src-comment-delimiter">// </span><span class="src-comment">&#10128;</span>
+  }
+
+  <span class="src-keyword">return</span> reverse ? TRUE : FALSE;                     <span class="src-comment-delimiter">// </span><span class="src-comment">&#10129;</span>
+}
+</pre>
+</div>
+
+<p>
+Es interesante desde el argumento. Al igual que <code>walker</code> opera con una
+copia de la estructura <code>RE</code> ➊. Necesitamos optener los componentes de la
+exprecion, no obstante estos se descartan de la expresion original a medida
+que se optinen ➍. Si manejaramos un puntero en lugar de una copia y el
+constructor requiriera mas de un ciclo de repeticion, para el segundo ciclo
+la exprecion origen, estaria imcompleta o vacia y el resultado seria
+incorrecto.
+</p>
+
+<p>
+Es valido que existan metacaracteres dentro de los conjuntos, ya que el
+numero de caracteres con el que pueden coincider es arbitrario necesitamos
+almacenar el resultado. Ademas debemos activar el modificador de negacion
+(<code>reverse</code>) si el primer caracter del conjunto es el signo <code>^</code> ➋ y
+descartarlo de la expresion avanzando un caracter ➌.
+</p>
+
+<p>
+Una vez que tenemos los constructores, hace falta verificar uno a uno, hasta
+optener una coincidencia o terminar el bucle <code>while</code> ➍.
+</p>
+
+<p>
+Si terminamos el bucle <code>while</code> sin ninguna coincidencia se devuelve
+<code>FALSE</code> a menos que <code>reverse</code> este activo, en ese caso devolvemos
+<code>TRUE</code> ➑.
+</p>
+
+<p>
+Si hay una coincidencia devolvemos <code>TRUE</code> a menos que <code>reverse</code> este
+activo, en ese caso devolvemos <code>FALSE</code> ➐.
+</p>
+
+<p>
+La evalucion de cada componente depende de su tipo&#x2026; alucinantes
+recursiones, echamos mano de <code>match</code> ➎ al examinar rangos, metacaracteres
+y <em>punto</em>? (ha, por que no?).
+</p>
+
+<p>
+Las secuencias de caracteres requieren un trato especial. Debe compararse
+caracter a caracter de la secuencia, contra el caracter de la posicion actual en
+cadena. Dos opciones surgen, un <code>for</code> o invocar de entre los muertos
+a una funcion antes descartada <code>strnchr</code>! ➏
+</p>
+
+<p>
+(!#&amp;)┘? utilizar <em>tracker</em> para optener (casi) todos los constructores, no
+hace necesario aplicar escapes a cada signo relevante en los conjuntos&#x2026;
+alto, no, no solo eso, tambien proboca que existan rangos fuera de las
+agrupaciones, wtf?
+</p>
+
+<p>
+ヽ(;^o^ヽ) je, es una <q>caracteristica</q> o un inconveniente de facil solucion.
+Solo hay que eliminar el reconocimiento de rangos de <code>tracker</code> e
+implementar un <code>tracker</code> especifico para los conjuntos.
+</p>
+
+<p>
+(っ◕‿◕)っ (づ｡◕‿‿◕｡)づ (ノಠ益ಠ)ノ (ノ・∀・)ノ (Todos: ¡Felicidades
+(Shinji)!)
+</p>
+
+<p>
+Ya esta listo nuestro motor regexp 100% funcional (con caracteristicas
+especiales incluidas)
+</p>
+
+<p>
+Algunas pruebas (ya sabes, al final del ultimo <code>NTEST</code> dentro de <span class="file">test.c</span>):
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-c">NTEST( <span class="src-string">"a"</span>, <span class="src-string">":a"</span>, 1 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">":A"</span>, 0 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">":d"</span>, 0 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">":D"</span>, 1 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">":w"</span>, 1 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">":W"</span>, 0 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">":s"</span>, 0 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">":S"</span>, 1 );
+NTEST( <span class="src-string">"A"</span>, <span class="src-string">":a"</span>, 1 );
+NTEST( <span class="src-string">"A"</span>, <span class="src-string">":A"</span>, 0 );
+NTEST( <span class="src-string">"A"</span>, <span class="src-string">":d"</span>, 0 );
+NTEST( <span class="src-string">"A"</span>, <span class="src-string">":D"</span>, 1 );
+NTEST( <span class="src-string">"A"</span>, <span class="src-string">":w"</span>, 1 );
+NTEST( <span class="src-string">"A"</span>, <span class="src-string">":W"</span>, 0 );
+NTEST( <span class="src-string">"A"</span>, <span class="src-string">":s"</span>, 0 );
+NTEST( <span class="src-string">"A"</span>, <span class="src-string">":S"</span>, 1 );
+NTEST( <span class="src-string">"4"</span>, <span class="src-string">":a"</span>, 0 );
+NTEST( <span class="src-string">"4"</span>, <span class="src-string">":A"</span>, 1 );
+NTEST( <span class="src-string">"4"</span>, <span class="src-string">":d"</span>, 1 );
+NTEST( <span class="src-string">"4"</span>, <span class="src-string">":D"</span>, 0 );
+NTEST( <span class="src-string">"4"</span>, <span class="src-string">":w"</span>, 1 );
+NTEST( <span class="src-string">"4"</span>, <span class="src-string">":W"</span>, 0 );
+NTEST( <span class="src-string">"4"</span>, <span class="src-string">":s"</span>, 0 );
+NTEST( <span class="src-string">"4"</span>, <span class="src-string">":S"</span>, 1 );
+NTEST( <span class="src-string">" "</span>, <span class="src-string">":a"</span>, 0 );
+NTEST( <span class="src-string">" "</span>, <span class="src-string">":A"</span>, 1 );
+NTEST( <span class="src-string">" "</span>, <span class="src-string">":d"</span>, 0 );
+NTEST( <span class="src-string">" "</span>, <span class="src-string">":D"</span>, 1 );
+NTEST( <span class="src-string">" "</span>, <span class="src-string">":w"</span>, 0 );
+NTEST( <span class="src-string">" "</span>, <span class="src-string">":W"</span>, 1 );
+NTEST( <span class="src-string">" "</span>, <span class="src-string">":s"</span>, 1 );
+NTEST( <span class="src-string">" "</span>, <span class="src-string">":S"</span>, 0 );
+NTEST( <span class="src-string">"\t"</span>, <span class="src-string">":a"</span>, 0 );
+NTEST( <span class="src-string">"\t"</span>, <span class="src-string">":A"</span>, 1 );
+NTEST( <span class="src-string">"\t"</span>, <span class="src-string">":d"</span>, 0 );
+NTEST( <span class="src-string">"\t"</span>, <span class="src-string">":D"</span>, 1 );
+NTEST( <span class="src-string">"\t"</span>, <span class="src-string">":w"</span>, 0 );
+NTEST( <span class="src-string">"\t"</span>, <span class="src-string">":W"</span>, 1 );
+NTEST( <span class="src-string">"\t"</span>, <span class="src-string">":s"</span>, 1 );
+NTEST( <span class="src-string">"\t"</span>, <span class="src-string">":S"</span>, 0 );
+
+NTEST( <span class="src-string">"abc"</span>, <span class="src-string">":a"</span>, 3 );
+NTEST( <span class="src-string">"abc"</span>, <span class="src-string">":A"</span>, 0 );
+NTEST( <span class="src-string">"abc"</span>, <span class="src-string">":d"</span>, 0 );
+NTEST( <span class="src-string">"abc"</span>, <span class="src-string">":D"</span>, 3 );
+NTEST( <span class="src-string">"abc"</span>, <span class="src-string">":w"</span>, 3 );
+NTEST( <span class="src-string">"abc"</span>, <span class="src-string">":W"</span>, 0 );
+NTEST( <span class="src-string">"abc"</span>, <span class="src-string">":s"</span>, 0 );
+NTEST( <span class="src-string">"abc"</span>, <span class="src-string">":S"</span>, 3 );
+NTEST( <span class="src-string">"ABC"</span>, <span class="src-string">":a"</span>, 3 );
+NTEST( <span class="src-string">"ABC"</span>, <span class="src-string">":A"</span>, 0 );
+NTEST( <span class="src-string">"ABC"</span>, <span class="src-string">":d"</span>, 0 );
+NTEST( <span class="src-string">"ABC"</span>, <span class="src-string">":D"</span>, 3 );
+NTEST( <span class="src-string">"ABC"</span>, <span class="src-string">":w"</span>, 3 );
+NTEST( <span class="src-string">"ABC"</span>, <span class="src-string">":W"</span>, 0 );
+NTEST( <span class="src-string">"ABC"</span>, <span class="src-string">":s"</span>, 0 );
+NTEST( <span class="src-string">"ABC"</span>, <span class="src-string">":S"</span>, 3 );
+NTEST( <span class="src-string">"123"</span>, <span class="src-string">":a"</span>, 0 );
+NTEST( <span class="src-string">"123"</span>, <span class="src-string">":A"</span>, 3 );
+NTEST( <span class="src-string">"123"</span>, <span class="src-string">":d"</span>, 3 );
+NTEST( <span class="src-string">"123"</span>, <span class="src-string">":D"</span>, 0 );
+NTEST( <span class="src-string">"123"</span>, <span class="src-string">":w"</span>, 3 );
+NTEST( <span class="src-string">"123"</span>, <span class="src-string">":W"</span>, 0 );
+NTEST( <span class="src-string">"123"</span>, <span class="src-string">":s"</span>, 0 );
+NTEST( <span class="src-string">"123"</span>, <span class="src-string">":S"</span>, 3 );
+NTEST( <span class="src-string">" \n\t"</span>, <span class="src-string">":a"</span>, 0 );
+NTEST( <span class="src-string">" \n\t"</span>, <span class="src-string">":A"</span>, 3 );
+NTEST( <span class="src-string">" \n\t"</span>, <span class="src-string">":d"</span>, 0 );
+NTEST( <span class="src-string">" \n\t"</span>, <span class="src-string">":D"</span>, 3 );
+NTEST( <span class="src-string">" \n\t"</span>, <span class="src-string">":w"</span>, 0 );
+NTEST( <span class="src-string">" \n\t"</span>, <span class="src-string">":W"</span>, 3 );
+NTEST( <span class="src-string">" \n\t"</span>, <span class="src-string">":s"</span>, 3 );
+NTEST( <span class="src-string">" \n\t"</span>, <span class="src-string">":S"</span>, 0 );
+NTEST( <span class="src-string">" \n\t"</span>, <span class="src-string">":a"</span>, 0 );
+NTEST( <span class="src-string">" \n\t"</span>, <span class="src-string">":A"</span>, 3 );
+NTEST( <span class="src-string">" \n\t"</span>, <span class="src-string">":d"</span>, 0 );
+NTEST( <span class="src-string">" \n\t"</span>, <span class="src-string">":D"</span>, 3 );
+NTEST( <span class="src-string">" \n\t"</span>, <span class="src-string">":w"</span>, 0 );
+NTEST( <span class="src-string">" \n\t"</span>, <span class="src-string">":W"</span>, 3 );
+NTEST( <span class="src-string">" \n\t"</span>, <span class="src-string">":s"</span>, 3 );
+NTEST( <span class="src-string">" \n\t"</span>, <span class="src-string">":S"</span>, 0 );
+
+NTEST( <span class="src-string">"abc"</span>, <span class="src-string">":a+"</span>, 1 );
+NTEST( <span class="src-string">"abc"</span>, <span class="src-string">":A+"</span>, 0 );
+NTEST( <span class="src-string">"abc"</span>, <span class="src-string">":d+"</span>, 0 );
+NTEST( <span class="src-string">"abc"</span>, <span class="src-string">":D+"</span>, 1 );
+NTEST( <span class="src-string">"abc"</span>, <span class="src-string">":w+"</span>, 1 );
+NTEST( <span class="src-string">"abc"</span>, <span class="src-string">":W+"</span>, 0 );
+NTEST( <span class="src-string">"abc"</span>, <span class="src-string">":s+"</span>, 0 );
+NTEST( <span class="src-string">"abc"</span>, <span class="src-string">":S+"</span>, 1 );
+NTEST( <span class="src-string">"ABC"</span>, <span class="src-string">":a+"</span>, 1 );
+NTEST( <span class="src-string">"ABC"</span>, <span class="src-string">":A+"</span>, 0 );
+NTEST( <span class="src-string">"ABC"</span>, <span class="src-string">":d+"</span>, 0 );
+NTEST( <span class="src-string">"ABC"</span>, <span class="src-string">":D+"</span>, 1 );
+NTEST( <span class="src-string">"ABC"</span>, <span class="src-string">":w+"</span>, 1 );
+NTEST( <span class="src-string">"ABC"</span>, <span class="src-string">":W+"</span>, 0 );
+NTEST( <span class="src-string">"ABC"</span>, <span class="src-string">":s+"</span>, 0 );
+NTEST( <span class="src-string">"ABC"</span>, <span class="src-string">":S+"</span>, 1 );
+NTEST( <span class="src-string">"123"</span>, <span class="src-string">":a+"</span>, 0 );
+NTEST( <span class="src-string">"123"</span>, <span class="src-string">":A+"</span>, 1 );
+NTEST( <span class="src-string">"123"</span>, <span class="src-string">":d+"</span>, 1 );
+NTEST( <span class="src-string">"123"</span>, <span class="src-string">":D+"</span>, 0 );
+NTEST( <span class="src-string">"123"</span>, <span class="src-string">":w+"</span>, 1 );
+NTEST( <span class="src-string">"123"</span>, <span class="src-string">":W+"</span>, 0 );
+NTEST( <span class="src-string">"123"</span>, <span class="src-string">":s+"</span>, 0 );
+NTEST( <span class="src-string">"123"</span>, <span class="src-string">":S+"</span>, 1 );
+NTEST( <span class="src-string">" \n\t"</span>, <span class="src-string">":a+"</span>, 0 );
+NTEST( <span class="src-string">" \n\t"</span>, <span class="src-string">":A+"</span>, 1 );
+NTEST( <span class="src-string">" \n\t"</span>, <span class="src-string">":d+"</span>, 0 );
+NTEST( <span class="src-string">" \n\t"</span>, <span class="src-string">":D+"</span>, 1 );
+NTEST( <span class="src-string">" \n\t"</span>, <span class="src-string">":w+"</span>, 0 );
+NTEST( <span class="src-string">" \n\t"</span>, <span class="src-string">":W+"</span>, 1 );
+NTEST( <span class="src-string">" \n\t"</span>, <span class="src-string">":s+"</span>, 1 );
+NTEST( <span class="src-string">" \n\t"</span>, <span class="src-string">":S+"</span>, 0 );
+NTEST( <span class="src-string">" \n\t"</span>, <span class="src-string">":a+"</span>, 0 );
+NTEST( <span class="src-string">" \n\t"</span>, <span class="src-string">":A+"</span>, 1 );
+NTEST( <span class="src-string">" \n\t"</span>, <span class="src-string">":d+"</span>, 0 );
+NTEST( <span class="src-string">" \n\t"</span>, <span class="src-string">":D+"</span>, 1 );
+NTEST( <span class="src-string">" \n\t"</span>, <span class="src-string">":w+"</span>, 0 );
+NTEST( <span class="src-string">" \n\t"</span>, <span class="src-string">":W+"</span>, 1 );
+NTEST( <span class="src-string">" \n\t"</span>, <span class="src-string">":s+"</span>, 1 );
+NTEST( <span class="src-string">" \n\t"</span>, <span class="src-string">":S+"</span>, 0 );
+
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">":a"</span>, 5 );
+
+NTEST( <span class="src-string">"((("</span>, <span class="src-string">":("</span>, 3 );
+NTEST( <span class="src-string">")))"</span>, <span class="src-string">":)"</span>, 3 );
+NTEST( <span class="src-string">"&lt;&lt;&lt;"</span>, <span class="src-string">":&lt;"</span>, 3 );
+NTEST( <span class="src-string">"&gt;&gt;&gt;"</span>, <span class="src-string">":&gt;"</span>, 3 );
+NTEST( <span class="src-string">":::"</span>, <span class="src-string">"::"</span>, 3 );
+NTEST( <span class="src-string">"|||"</span>, <span class="src-string">":|"</span>, 3 );
+NTEST( <span class="src-string">"###"</span>, <span class="src-string">":#"</span>, 3 );
+NTEST( <span class="src-string">":#()|&lt;&gt;"</span>, <span class="src-string">":::#:(:):|:&lt;:&gt;"</span>, 1 );
+NTEST( <span class="src-string">":#()|&lt;&gt;"</span>, <span class="src-string">"(::|:#|:(|:)|:||:&lt;|:&gt;)"</span>, 7 );
+NTEST( <span class="src-string">"(test1)(test2)"</span>, <span class="src-string">":(test:d:)"</span>, 2 );
+
+NTEST( <span class="src-string">""</span>,  <span class="src-string">"."</span>,  0 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"."</span>,  1 );
+NTEST( <span class="src-string">"aaa"</span>, <span class="src-string">"."</span>, 3 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"..."</span>, 0 );
+NTEST( <span class="src-string">"a aaa aaa"</span>, <span class="src-string">"."</span>, 9 );
+NTEST( <span class="src-string">"a aaa aaa"</span>, <span class="src-string">"..."</span>, 3 );
+NTEST( <span class="src-string">"a aaa aaa"</span>, <span class="src-string">".aa"</span>, 2 );
+NTEST( <span class="src-string">"a aaa aaa"</span>, <span class="src-string">"aa."</span>, 2 );
+NTEST( <span class="src-string">"Raptor Test"</span>, <span class="src-string">".a"</span>, 1 );
+NTEST( <span class="src-string">"Raptor Test"</span>, <span class="src-string">".t"</span>, 2 );
+NTEST( <span class="src-string">"Raptor Test"</span>, <span class="src-string">".z"</span>, 0 );
+NTEST( <span class="src-string">"Raptor Test"</span>, <span class="src-string">"a."</span>, 1 );
+NTEST( <span class="src-string">"Raptor Test"</span>, <span class="src-string">" ."</span>, 1 );
+NTEST( <span class="src-string">"Raptor Test"</span>, <span class="src-string">"z."</span>, 0 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">".?"</span>, 1 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">".+"</span>, 1 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">".*"</span>, 1 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">".{1}"</span>, 1 );
+NTEST( <span class="src-string">"a aaa aaa"</span>, <span class="src-string">".?"</span>, 9 );
+NTEST( <span class="src-string">"a aaa aaa"</span>, <span class="src-string">".+"</span>, 1 );
+NTEST( <span class="src-string">"a aaa aaa"</span>, <span class="src-string">".*"</span>, 1 );
+NTEST( <span class="src-string">"a aaa aaa"</span>, <span class="src-string">".{1}"</span>, 9 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"a.?"</span>, 1 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"a.+"</span>, 0 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"a.*"</span>, 1 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"a.{1}"</span>, 0 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|."</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|.?"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|.+"</span>, 2 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|.*"</span>, 2 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">".|a"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">".?|a"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">".+|a"</span>, 1 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">".*|a"</span>, 1);
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"(a|.)"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"(a|.?)"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"(a|.+)"</span>, 2 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"(a|.*)"</span>, 2 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"(.|a)"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"(.?|a)"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"(.+|a)"</span>, 1 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"(.*|a)"</span>, 1);
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|(.)"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|(.?)"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|(.+)"</span>, 2 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|(.*)"</span>, 2 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"(.)|a"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"(.?)|a"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"(.+)|a"</span>, 1 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"(.*)|a"</span>, 1);
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|(.)"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|(.)?"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|(.)+"</span>, 2 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|(.)*"</span>, 2 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"(.)|a"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"(.)?|a"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"(.)+|a"</span>, 1 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"(.)*|a"</span>, 1);
+NTEST( <span class="src-string">"abababababababababababababababababababab"</span>, <span class="src-string">"."</span> , 40 );
+NTEST( <span class="src-string">"abababababababababababababababababababab"</span>, <span class="src-string">"(a.)"</span> , 20 );
+NTEST( <span class="src-string">"abababababababababababababababababababab"</span>, <span class="src-string">"(.a)"</span> , 19 );
+NTEST( <span class="src-string">"abababababababababababababababababababab"</span>, <span class="src-string">"(:a.)"</span> , 20 );
+NTEST( <span class="src-string">"abababababababababababababababababababab"</span>, <span class="src-string">"(.:a)"</span> , 20 );
+NTEST( <span class="src-string">"abababababababababababababababababababab"</span>, <span class="src-string">"(.{5}:a{5})"</span> , 4 );
+
+NTEST( <span class="src-string">""</span>,  <span class="src-string">"a-z"</span>,  0 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"a-z"</span>,  1 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"A-Z"</span>,  0 );
+NTEST( <span class="src-string">"A"</span>, <span class="src-string">"A-Z"</span>,  1 );
+NTEST( <span class="src-string">"1"</span>, <span class="src-string">"a-z"</span>,  0 );
+NTEST( <span class="src-string">"1"</span>, <span class="src-string">"0-9"</span>,  1 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"0-9"</span>,  0 );
+NTEST( <span class="src-string">"A"</span>, <span class="src-string">"0-9"</span>,  0 );
+NTEST( <span class="src-string">"abc"</span>, <span class="src-string">"a-z"</span>, 3 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"a-za-za-z"</span>, 0 );
+NTEST( <span class="src-string">"a bcd efg"</span>, <span class="src-string">"a-z"</span>, 7 );
+NTEST( <span class="src-string">"a bcd efg"</span>, <span class="src-string">"a-za-za-z"</span>, 2 );
+NTEST( <span class="src-string">"a baa eaa"</span>, <span class="src-string">"a-zaa"</span>, 2 );
+NTEST( <span class="src-string">"a aad aag"</span>, <span class="src-string">"aaa-z"</span>, 2 );
+NTEST( <span class="src-string">"Raptor Test"</span>, <span class="src-string">"A-Za"</span>, 1 );
+NTEST( <span class="src-string">"Raptor Test"</span>, <span class="src-string">"a-zt"</span>, 2 );
+NTEST( <span class="src-string">"Raptor Test"</span>, <span class="src-string">"a-zz"</span>, 0 );
+NTEST( <span class="src-string">"Raptor Test"</span>, <span class="src-string">"aa-z"</span>, 1 );
+NTEST( <span class="src-string">"Raptor Test"</span>, <span class="src-string">" A-Z"</span>, 1 );
+NTEST( <span class="src-string">"Raptor Test"</span>, <span class="src-string">"za-z"</span>, 0 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"a-z?"</span>, 1 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"a-z+"</span>, 1 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"a-z*"</span>, 1 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"a-z{1}"</span>, 1 );
+NTEST( <span class="src-string">"a bcd efg"</span>, <span class="src-string">"a-z?"</span>, 9 );
+NTEST( <span class="src-string">"a bcd efg"</span>, <span class="src-string">"a-z+"</span>, 3 );
+NTEST( <span class="src-string">"a bcd efg"</span>, <span class="src-string">"a-z*"</span>, 5 );
+NTEST( <span class="src-string">"a bcd efg"</span>, <span class="src-string">"a-z{1}"</span>, 7 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"aa-z?"</span>, 1 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"aa-z+"</span>, 0 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"aa-z*"</span>, 1 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"aa-z{1}"</span>, 0 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|a-z"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|a-z?"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|a-z+"</span>, 2 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|a-z*"</span>, 2 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a-z|a"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a-z?|a"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a-z+|a"</span>, 1 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a-z*|a"</span>, 1);
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"(a|a-z)"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"(a|a-z?)"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"(a|a-z+)"</span>, 2 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"(a|a-z*)"</span>, 2 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"(a-z|a)"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"(a-z?|a)"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"(a-z+|a)"</span>, 1 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"(a-z*|a)"</span>, 1);
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|(a-z)"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|(a-z?)"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|(a-z+)"</span>, 2 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|(a-z*)"</span>, 2 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"(a-z)|a"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"(a-z?)|a"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"(a-z+)|a"</span>, 1 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"(a-z*)|a"</span>, 1);
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|(a-z)"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|(a-z)?"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|(a-z)+"</span>, 2 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|(a-z)*"</span>, 2 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"(a-z)|a"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"(a-z)?|a"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"(a-z)+|a"</span>, 1 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"(a-z)*|a"</span>, 1);
+NTEST( <span class="src-string">"1a2a3a4a5a6a"</span>, <span class="src-string">"1-6a"</span>, 6 );
+NTEST( <span class="src-string">"1a2a3a4a5a6a"</span>, <span class="src-string">"1-3a"</span>, 3 );
+NTEST( <span class="src-string">"1a2b3c4d5e6f"</span>, <span class="src-string">"1-6a-z"</span>, 6 );
+NTEST( <span class="src-string">"1a2b3c4d5e6f"</span>, <span class="src-string">"1-3a-z"</span>, 3 );
+NTEST( <span class="src-string">"abababababababababababababababababababab"</span>, <span class="src-string">"(aa-z)"</span> , 20 );
+NTEST( <span class="src-string">"abababababababababababababababababababab"</span>, <span class="src-string">"(a-za)"</span> , 19 );
+NTEST( <span class="src-string">"abababababababababababababababababababab"</span>, <span class="src-string">"(:aa-z)"</span> , 20 );
+NTEST( <span class="src-string">"abababababababababababababababababababab"</span>, <span class="src-string">"(a-z:a)"</span> , 20 );
+NTEST( <span class="src-string">"abababababababababababababababababababab"</span>, <span class="src-string">"(a-z{5}:a{5})"</span> , 4 );
+
+NTEST( <span class="src-string">""</span>,  <span class="src-string">"[a]"</span>,  0 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"[a]"</span>,  1 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"[.]"</span>,  1 );
+NTEST( <span class="src-string">"."</span>, <span class="src-string">"[.]"</span>,  1 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"[A]"</span>,  0 );
+NTEST( <span class="src-string">"A"</span>, <span class="src-string">"[A]"</span>,  1 );
+NTEST( <span class="src-string">"1"</span>, <span class="src-string">"[A]"</span>,  0 );
+NTEST( <span class="src-string">"1"</span>, <span class="src-string">"[1]"</span>,  1 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"[:a]"</span>, 1 );
+NTEST( <span class="src-string">"A"</span>, <span class="src-string">"[:D]"</span>, 1 );
+NTEST( <span class="src-string">"aaa"</span>, <span class="src-string">"[a-z]"</span>, 3 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"[a-z][a-z][a-z]"</span>, 0 );
+NTEST( <span class="src-string">"a aaa aaa"</span>, <span class="src-string">"[a-z]"</span>, 7 );
+NTEST( <span class="src-string">"a aaa aaa"</span>, <span class="src-string">"[ a-z]"</span>, 9 );
+NTEST( <span class="src-string">"a aaa aaa"</span>, <span class="src-string">"[a-z][a-z][a-z]"</span>, 2 );
+NTEST( <span class="src-string">"a aaa aaa"</span>, <span class="src-string">"[a-z]aa"</span>, 2 );
+NTEST( <span class="src-string">"a aaa aaa"</span>, <span class="src-string">"aa[a-z]"</span>, 2 );
+NTEST( <span class="src-string">"Raptor Test"</span>, <span class="src-string">"[:w]a"</span>, 1 );
+NTEST( <span class="src-string">"Raptor Test"</span>, <span class="src-string">"[:w]t"</span>, 2 );
+NTEST( <span class="src-string">"Raptor Test"</span>, <span class="src-string">"[a-z]z"</span>, 0 );
+NTEST( <span class="src-string">"Raptor Test"</span>, <span class="src-string">"a[a-z]"</span>, 1 );
+NTEST( <span class="src-string">"Raptor Test"</span>, <span class="src-string">" [A-Z]"</span>, 1 );
+NTEST( <span class="src-string">"Raptor Test"</span>, <span class="src-string">"z[a-z]"</span>, 0 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"[a]?"</span>, 1 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"[a]+"</span>, 1 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"[a]*"</span>, 1 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"[a]{1}"</span>, 1 );
+NTEST( <span class="src-string">"a aaa aaa"</span>, <span class="src-string">"[a-z]?"</span>, 9 );
+NTEST( <span class="src-string">"a aaa aaa"</span>, <span class="src-string">"[a-z]+"</span>, 3 );
+NTEST( <span class="src-string">"a aaa aaa"</span>, <span class="src-string">"[a-z]*"</span>, 5 );
+NTEST( <span class="src-string">"a aaa aaa"</span>, <span class="src-string">"[a-z]{1}"</span>, 7 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"a[a-z]?"</span>, 1 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"a[a-z]+"</span>, 0 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"a[a-z]*"</span>, 1 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"a[a-z]{1}"</span>, 0 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|[aeiou]"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|[aeiou]?"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|[aeiou]+"</span>, 2 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|[aeiou]*"</span>, 2 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"[aeiou]|a"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"[aeiou]?|a"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"[aeiou]+|a"</span>, 1 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"[aeiou]*|a"</span>, 1);
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"(a|[aeiou])"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"(a|[aeiou]?)"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"(a|[aeiou]+)"</span>, 2 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"(a|[aeiou]*)"</span>, 2 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"([aeiou]|a)"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"([aeiou]?|a)"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"([aeiou]+|a)"</span>, 1 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"([aeiou]*|a)"</span>, 1);
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|([aeiou])"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|([aeiou]?)"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|([aeiou]+)"</span>, 2 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|([aeiou]*)"</span>, 2 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"([aeiou])|a"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"([aeiou]?)|a"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"([aeiou]+)|a"</span>, 1 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"([aeiou]*)|a"</span>, 1);
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|([aeiou])"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|([aeiou])?"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|([aeiou])+"</span>, 2 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|([aeiou])*"</span>, 2 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"([aeiou])|a"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"([aeiou])?|a"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"([aeiou])+|a"</span>, 1 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"([aeiou])*|a"</span>, 1);
+NTEST( <span class="src-string">"1a2a3a4a5a6a"</span>, <span class="src-string">"[1-6]a"</span>, 6 );
+NTEST( <span class="src-string">"1a2a3a4a5a6a"</span>, <span class="src-string">"[1-3]a"</span>, 3 );
+NTEST( <span class="src-string">"1a2b3c4d5e6f"</span>, <span class="src-string">"[123456][abcdef]"</span>, 6 );
+NTEST( <span class="src-string">"1a2b3c4d5e6f"</span>, <span class="src-string">"[123][abcdef]"</span>, 3 );
+NTEST( <span class="src-string">".b.b.b.b.b.b.b.b.b.b.b.b.b.b.b.b.b.b.b.b"</span>, <span class="src-string">"[:.]"</span>,  20 );
+NTEST( <span class="src-string">".b.b.b.b.b.b.b.b.b.b.b.b.b.b.b.b.b.b.b.b"</span>, <span class="src-string">"[:.b]"</span>,  40 );
+NTEST( <span class="src-string">"abababababababababababababababababababab"</span>, <span class="src-string">"(a[ab])"</span> , 20 );
+NTEST( <span class="src-string">"abababababababababababababababababababab"</span>, <span class="src-string">"([ab]a)"</span> , 19 );
+NTEST( <span class="src-string">"abababababababababababababababababababab"</span>, <span class="src-string">"(:a[ab])"</span> , 20 );
+NTEST( <span class="src-string">"abababababababababababababababababababab"</span>, <span class="src-string">"([ab]:a)"</span> , 20 );
+NTEST( <span class="src-string">"abababababababababababababababababababab"</span>, <span class="src-string">"([ab]{5}:a{5})"</span> , 4 );
+NTEST( <span class="src-string">"()&lt;&gt;[]{}*?+"</span>, <span class="src-string">"[:(:):&lt;:&gt;:[:]:{:}:*:?:+]"</span>, 11 );
+NTEST( <span class="src-string">")&gt;}"</span>, <span class="src-string">"[)&gt;}]"</span>, 3 );
+
+NTEST( <span class="src-string">""</span>,  <span class="src-string">"[^a]"</span>,  0 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"[^1]"</span>,  1 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"[^a]"</span>,  0 );
+NTEST( <span class="src-string">"A"</span>, <span class="src-string">"[^a]"</span>,  1 );
+NTEST( <span class="src-string">"1"</span>, <span class="src-string">"[^1]"</span>,  0 );
+NTEST( <span class="src-string">"1"</span>, <span class="src-string">"[^A]"</span>,  1 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"[^:a]"</span>, 0 );
+NTEST( <span class="src-string">"A"</span>, <span class="src-string">"[^:A]"</span>, 1 );
+NTEST( <span class="src-string">"aaa"</span>, <span class="src-string">"[^z]"</span>, 3 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"[^z][^z][^z]"</span>, 0 );
+NTEST( <span class="src-string">"a aaa aaa"</span>, <span class="src-string">"[^ ]"</span>, 7 );
+NTEST( <span class="src-string">"a aaa aaa"</span>, <span class="src-string">"[^ a]"</span>, 0 );
+NTEST( <span class="src-string">"a aaa aaa"</span>, <span class="src-string">"[^:d]"</span>, 9 );
+NTEST( <span class="src-string">"a aaa aaa"</span>, <span class="src-string">"[^:d:s]"</span>, 7 );
+NTEST( <span class="src-string">"a aaa aaa"</span>, <span class="src-string">"[^:d:s][^:d:s][^:d:s]"</span>, 2 );
+NTEST( <span class="src-string">"a aaa aaa"</span>, <span class="src-string">"[^:d:s]aa"</span>, 2 );
+NTEST( <span class="src-string">"a aaa aaa"</span>, <span class="src-string">"aa[^:d:s]"</span>, 2 );
+NTEST( <span class="src-string">"Raptor Test"</span>, <span class="src-string">"[^:d:s]a"</span>, 1 );
+NTEST( <span class="src-string">"Raptor Test"</span>, <span class="src-string">"[^A-Z]t"</span>, 2 );
+NTEST( <span class="src-string">"Raptor Test"</span>, <span class="src-string">"[^:s]z"</span>, 0 );
+NTEST( <span class="src-string">"Raptor Test"</span>, <span class="src-string">"a[^ ]"</span>, 1 );
+NTEST( <span class="src-string">"Raptor Test"</span>, <span class="src-string">" [^t]"</span>, 1 );
+NTEST( <span class="src-string">"Raptor Test"</span>, <span class="src-string">"z[^a]"</span>, 0 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"[^z]?"</span>, 1 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"[^z]+"</span>, 1 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"[^z]*"</span>, 1 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"[^z]{1}"</span>, 1 );
+NTEST( <span class="src-string">"a aaa aaa"</span>, <span class="src-string">"[^ ]?"</span>, 9 );
+NTEST( <span class="src-string">"a aaa aaa"</span>, <span class="src-string">"[^ ]+"</span>, 3 );
+NTEST( <span class="src-string">"a aaa aaa"</span>, <span class="src-string">"[^ ]*"</span>, 5 );
+NTEST( <span class="src-string">"a aaa aaa"</span>, <span class="src-string">"[^ ]{1}"</span>, 7 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"a[^ ]?"</span>, 1 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"a[^ ]+"</span>, 0 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"a[^ ]*"</span>, 1 );
+NTEST( <span class="src-string">"a"</span>, <span class="src-string">"a[^ ]{1}"</span>, 0 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|[^ ]"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|[^ ]?"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|[^ ]+"</span>, 2 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|[^ ]*"</span>, 2 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"[^ ]|a"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"[^ ]?|a"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"[^ ]+|a"</span>, 1 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"[^ ]*|a"</span>, 1);
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"(a|[^ ])"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"(a|[^ ]?)"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"(a|[^ ]+)"</span>, 2 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"(a|[^ ]*)"</span>, 2 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"([^ ]|a)"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"([^ ]?|a)"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"([^ ]+|a)"</span>, 1 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"([^ ]*|a)"</span>, 1);
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|([^ ])"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|([^ ]?)"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|([^ ]+)"</span>, 2 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|([^ ]*)"</span>, 2 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"([^ ])|a"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"([^ ]?)|a"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"([^ ]+)|a"</span>, 1 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"([^ ]*)|a"</span>, 1);
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|([^ ])"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|([^ ])?"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|([^ ])+"</span>, 2 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"a|([^ ])*"</span>, 2 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"([^ ])|a"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"([^ ])?|a"</span>, 5 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"([^ ])+|a"</span>, 1 );
+NTEST( <span class="src-string">"aeiou"</span>, <span class="src-string">"([^ ])*|a"</span>, 1);
+NTEST( <span class="src-string">"1a2a3a4a5a6a"</span>, <span class="src-string">"[^:a]a"</span>, 6 );
+NTEST( <span class="src-string">"1a2a3a4a5a6a"</span>, <span class="src-string">"[^4-6]a"</span>, 3 );
+NTEST( <span class="src-string">"1a2b3c4d5e6f"</span>, <span class="src-string">"[^:a][^:d]"</span>, 6 );
+NTEST( <span class="src-string">"1a2b3c4d5e6f"</span>, <span class="src-string">"[^4-6][^:d]"</span>, 3 );
+NTEST( <span class="src-string">"abababababababababababababababababababab"</span>, <span class="src-string">"(a[^a])"</span> , 20 );
+NTEST( <span class="src-string">"abababababababababababababababababababab"</span>, <span class="src-string">"([^a]a)"</span> , 19 );
+NTEST( <span class="src-string">"abababababababababababababababababababab"</span>, <span class="src-string">"(:a[^a])"</span> , 20 );
+NTEST( <span class="src-string">"abababababababababababababababababababab"</span>, <span class="src-string">"([^b]:a)"</span> , 20 );
+NTEST( <span class="src-string">"abababababababababababababababababababab"</span>, <span class="src-string">"([^x]{5}:a{5})"</span> , 4 );
+NTEST( <span class="src-string">"()&lt;&gt;[]{}*?+"</span>, <span class="src-string">"[^:w]"</span>, 11 );
+</pre>
+</div>
+</div>
+
 </div>
 <div id="outline-container-sec-3-6-9" class="outline-4">
 <h4 id="sec-3-6-9">mods</h4>
