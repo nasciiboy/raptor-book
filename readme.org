@@ -11,6 +11,7 @@ Regexp Raptor*.
 
 - [[https://github.com/nasciiboy/RecursiveRegexpRaptor-4]]
 
+- [[https://github.com/nasciiboy/regexp3]] (port a golang)
 
 De momento el manual no es mas que un borrador, aun necesita varios meses mas
 para estar terminado, sugerencias y cambios seran bienvenidos
@@ -20,15 +21,9 @@ Por cierto, ninguna palabra tiene acentos, no es un error, es una caracteristica
 que facilita la busqueda de palabras clave. Los errores ortograficos seran
 revisados en la version final.
 
-El documento principal esta escrito en un formato de documentacion
-imaginario/experimental basado en /org/, /reStructuredText/ y /texinfo/. Aun no
-hay un programa que lo exporte a otro formato, pero se esta trabajando en ello.
-
-La version "preeliminar" se encuentra en formato htmt en el fichero
-[[file:raptor-book.html]] y en formato org (modificado) en [[file:raptor-book.org]], las
-modificaciones se realizaran en ambos ficheros. Una vez se tenga la primer
-version se actualizara [[file:raptor-book.morg]]. Si realizas alguna modificacion es
-preferible que sea en el fichero html.
+El documento principal esta escrito en un formato de documentacion experimental
+basado en /org/, /reStructuredText/ y /texinfo/ temporalmente conocido como
+[[https://github.com/nasciiboy/raptor-book/][morg]].
 
 Toda colabaracion sera registrada en el repositorio y en un fichero
 *CONTRIBUTORS.txt*. Las contribuciones destacadas tendran mencion dentro del
