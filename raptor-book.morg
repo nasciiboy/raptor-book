@@ -3333,7 +3333,7 @@
 
     Las respuestas a estos misterios y mucho mas, en el proximo capitulo!
 
-    :: PD ::
+    :: Nota ::
 
        Apartir de la siguiente seccion, eliminare todos los mensajes que se
        producen en @f(regexp3.h), son bastate molestos. Podrian suprimirse
@@ -5179,6 +5179,991 @@
     < src..
 
 *** mods
+
+    Esta prehistorica creacion ya puede conseguir presas por su cuenta, aun asi
+    requiere un poco mas de entrenamiento antes de ascender a las grades ligas
+    de los motores RegExp.
+
+    La kata de esta seccion nos trasmite una tecnica prohibida en los dojos
+    regexp mas ortodoxos, el @e(agua control), la habilidad de adaptarse
+    facilmente a distintas situaciones.
+
+    Nuestro motor contabiliza todas las coincidencias de la regexp, pero, y si:
+
+    - quisieramos detener la busqueda tras la primer coincidencia,
+
+    - o indicar que la coincidencia debe aparecer al final de la cadena,
+
+    - o al inicio,
+
+    - o modificar el comportamiento de un constructor,
+
+    - o de la expresion entera,
+
+    - o cualquer otra situacion extravagante y arbitraria?
+
+
+    Habitualmente los motores regexeros ofrecen las siguentes soluciones a este
+    dilema:
+
+    1. utilizar funciones especializadas
+
+    2. extender la sintaxis
+
+    3. agregar parametros en la funcion principal
+
+    4. o una combinacion con todas las anteriores
+
+
+    De estas, la solucion que mas se utiliza es @e(extender la sintaxis).
+    Supongo, es lo mas sencillo y facil de mantener. Particularmente se aplica a
+    tres casos concretos:
+
+    - Si el primer signo de la expresion es @c(^), se indica al motor que
+      la busqueda ha de realizarse solo en la primer posicion de la cadena
+
+    - Si el ultimo signo de la expresion es @c($), se indica al motor que la
+      coincidencia debe @"(emparejarse) con el final de la cadena.
+
+    - Si la cadena inicia con @c(^) y termina con @c($) se le indica al motor
+      que realice una busqueda solo en la primer posicion de la cadena y que la
+      coincidencia debe abarcar toda la cadena
+
+
+    Extender la sintaxis en nuestro codigo para dar soporte a los signos @c(^) y
+    @c($) apenas y requiere una ligera modifacacion en @c(regexp3)
+
+    ..src > c
+      unsigned int regexp3( char *txt, char *re ){
+        struct RE    rexp;
+        int result   = 0;
+        int atTheEnd = FALSE;                     // ➊
+        int loops    = strlen( txt );             // ➋
+        rexp.ptr     = re;
+        rexp.type    = PATH;
+        rexp.len     = strlen( re );
+        text.len     = loops;
+
+        if( text.len == 0 || rexp.len == 0 ) return 0;
+
+        if( rexp.ptr[ rexp.len - 1 ] == '$' ){    // ➌
+          atTheEnd = TRUE;
+          rexp.len--;
+        }
+
+        if( *rexp.ptr == '^' ){                   // ➍
+          fwrTrack( &rexp, 1 );
+          loops = 1;                              // ➎
+        }
+
+        for( int forward, i = 0; i < loops; i += forward ){
+          forward    = 1;
+          text.pos   = 0;
+          text.ptr   = txt           + i;
+          text.len   = strlen( txt ) - i;
+
+          if( walker( rexp ) ){                                        // ➏
+            if( atTheEnd ){ if( text.pos == text.len ) return TRUE; }  // ➐
+            else {                                                     // ➑
+              result++;
+              if ( text.pos > 0 ) forward = text.pos;
+            }
+          }
+        }
+
+        return result;
+      }
+    < src..
+
+    Los cambios son sencillos. Para realizar la busqueda en la primer posicion
+    de la cadena (signo @c(^) ➍) solo debemos limitar el ciclo de repeticiones
+    a una sola iteraccion ➎. De lo contrario el numero de iteracciones es igual
+    a la longitud de la cadena ➋.
+
+    Si debemos verificar que la coincidencia este al final de la cadena (signo
+    @c($) ➌), y ya que la cantidad de caracteres que forman el patron es
+    desconocido realizamos todas las comprobaciones atraves de la cadena, hasta
+    encontrar una coincidencia ➏. Si la longitud de la coincidencia
+    (@c(text.pos)) es igual al tamaño (relativo) de la cadena (@c(text.len))
+    tenemos una coincidencia al final de la cadena ➐. En este caso echamos mano
+    de una nueva variable con nombre @c(atTheEnd), si esta encendida caeremos
+    siempre en este caso ➐, de lo contrario, se lleva a cabo el conteo de
+    coincidencias ➑
+
+    ... y el caso con los dos signos @c(^) y @c($)? ¡¡¡ho my glob ꒰--■_■-꒱!!!
+    la solucion se presenta por si sola, solo hay un ciclo (@c(loops == 1)) y
+    debe abarcar toda la cadena.
+
+    Para probar la eficacia del nuevo cambio intentemos con estas pruebas
+
+    ..src > c
+      NTEST( "Raptor Test", "^Raptor", 1 );
+      NTEST( "Raptor Test", "Raptor$", 0 );
+      NTEST( "Raptor Test", "Test$", 1 );
+      NTEST( "Raptor Test", "^Test", 0 );
+      NTEST( "Raptor Test", "^Raptor Test$", 1 );
+    < src..
+
+    Ahora bien, como agregar nuevos modificadores? con nuevos signos
+    especiales? con una varible adicional? unimos todos los modificadores en una
+    mascara de bits? con mas @c(if)s?
+
+    ٩꒰･ัεั･꒱۶ si agregaramos nuevos signos a los extremos tendriamos que
+    establecer un orden de evaluacion mas elaborado. Por otra parte el metodo de
+    la varible adicional, nos obligaria a establecer valores adicionales en la
+    llamada, aunque su uso fuese anecdotico. Algo similar ocurre si agrupamos
+    las modificaciones en una varible extra en forma de mascara de bits, con
+    el engorroso inconveniente de tener que recordar nombres de constantes (por
+    lo general extensos).
+
+    En cualquier caso estos modificadores operan de forma @e(global), es decir,
+    afectan el comportamiento de toda la expresion. Si quisieramos implementar
+    modificadores a nivel de constructor (como la busqueda inversa en los
+    conjuntos) tendriamos un inconveniente adicional.
+
+    Varios motores utilizan la siguiente sintaxis
+
+    - c[(?i)] hace que la regexp ignore entre minusculas y mayusculas.
+
+    - c[(?c)] hace que la regexp distinga entre mayusculas y minusculas
+
+    - c[(?:)] no capturar coincidencia
+
+    - c[(?s)] @"(modo de una sola linea). Hace que punto coincida con todos los
+      caracteres, incluido el salto de linea.
+
+
+    Estas y otras @"(opciones de busqueda) pueden aplicarse a toda la regexp o a
+    parte de ella. No es imposible incorporarla al raptor, pero seria
+    complicado y roperia el flujo de ejecucion!
+
+    El raptor no teme romper tabus, menos si estan relacionadas con la sintaxis,
+    con tal de mantener el codigo lo mas sencillo posible, vamos a implementar
+    este esquema:
+
+    ..example >
+      constructor-cuantificador-modificador
+    < example..
+
+    con esto podemos modificar el comportamiento de los constructores de forma
+    individual, los modificadores se especifican luego de los cuantificadores
+    (si lo hacemos bien podemos unificar cuantificadores y modificadores
+    en una sola sintaxis, claro... si lo hacemos bien).
+
+    Para indicar modificadores que afecten de forma global tendremos este
+    esquema:
+
+    ..example >
+      modificador-regexp
+    < example..
+
+    el decir el modificador precede a la expresion.
+
+    Ambos, modificador local, como global seguiran la misma sintaxis: El signo
+    @c(#) le indicar al motor la presencia de una secuencia de uno o mas signos con
+    significado especial @"(los modificadores). La cadena de modificadores
+    termina cuando aparece el primer signo no establecido como modificador:
+
+    ..art >
+      #mod_1-mod_2-...-mod_nCualquierConstructor
+      ▲
+      │< modificadores >
+      └─ signo de modificador
+    < art..
+
+    Si queremos aplicar los modificadores @c(^) + @c($) la exprecion seria
+
+    ..example >
+      #^$regexp
+    < example..
+
+    para aplicar modificadores a un constructor
+
+    ..example >
+      [conjunto]*#MODS(agrupacion)#MODS
+    < example..
+
+    vamos con el codigo
+
+    ..src > c
+      #include <ctype.h>
+      #include <string.h>
+      #include <stdlib.h>
+
+      #define TRUE                 1
+      #define FALSE                0
+      #define INF         1073741824 // 2^30
+
+      #define MOD_ALPHA            1
+      #define MOD_OMEGA            2
+      #define MOD_LONLEY           4
+      #define MOD_FwrByChar        8
+      #define MOD_COMMUNISM       16
+
+      struct TEXT {
+        char *ptr;
+        int   pos;
+        int   len;
+      } static text;
+
+      enum TYPE { PATH, GROUP, HOOK, BACKREF, SET, RANGEAB, META, POINT, SIMPLE };
+
+      struct RE {
+        char          *ptr;
+        int            len;
+        enum     TYPE  type;
+        unsigned char  mods;
+        unsigned int   loopsMin, loopsMax;
+      };
+
+      static int  walker     ( struct RE  rexp );
+      static int  trekking   ( struct RE *rexp );
+      static int  looper     ( struct RE *rexp );
+      static int  tracker    ( struct RE *rexp, struct RE *track );
+      static int  trackByType( struct RE *rexp, struct RE *track, int type );
+      static void trackByLen ( struct RE *rexp, struct RE *track, int len, int type );
+      static void fwrRexp    ( struct RE *rexp, int len );
+
+      static void getMods    ( struct RE *rexp, struct RE *track );
+      static void getLoops   ( struct RE *rexp, struct RE *track );
+
+      static int  match      ( struct RE *rexp );
+      static int  matchSet   ( struct RE  rexp );
+      static int  matchRange ( struct RE *rexp, int   chr );
+      static int  matchMeta  ( struct RE *rexp, int   chr );
+      static int  matchText  ( struct RE *rexp, char *txt );
+
+      static int  walkMeta       ( char *str );
+      static int  walkSet        ( char *str, int len );
+      static int  countCharDigits( char *str );
+
+      unsigned int regexp3( char *txt, char *re ){
+        struct RE    rexp;
+        rexp.ptr     = re;
+        rexp.type    = PATH;
+        rexp.mods    = 0;
+        rexp.len     = strlen( re );
+        text.len     = strlen( txt );
+
+        if( text.len == 0 || rexp.len == 0 ) return 0;
+
+        getMods( &rexp, &rexp );
+
+        int result = 0, txtLen = text.len;
+        for( int forward, i = 0, loops = rexp.mods & MOD_ALPHA ? 1 : text.len; i < loops; i += forward ){
+          forward    = 1;
+          text.pos   = 0;
+          text.ptr   = txt    + i;
+          text.len   = txtLen - i;
+
+          if( walker( rexp ) ){
+            if     (  rexp.mods & MOD_OMEGA    ){ if( text.pos == text.len ) return TRUE; }
+            else if(  rexp.mods & MOD_LONLEY   )                             return TRUE;
+            else if( (rexp.mods & MOD_FwrByChar) || text.pos == 0 )          result++;
+            else   {  forward = text.pos;                                    result++; }
+          }
+        }
+
+        return result;
+      }
+
+      static int walker( struct RE rexp ){
+        struct RE track;
+        for( const int oPos = text.pos; trackByType( &rexp, &track, PATH ); text.pos = oPos )
+          if( trekking( &track ) ) return TRUE;
+
+        return FALSE;
+      }
+
+      static int trekking( struct RE *rexp ){
+        struct RE track;
+        while( tracker( rexp, &track ) )
+          if( looper( &track ) == FALSE ) return FALSE;
+
+        return TRUE;
+      }
+
+      static int looper( struct RE *rexp ){
+        int forward, loops = 0;
+
+        switch( rexp->type ){
+        case HOOK: case GROUP: case PATH:
+          while( loops < rexp->loopsMax && walker( *rexp ) )
+            loops++;
+          break;
+        case SET: case BACKREF: case META: case RANGEAB: case POINT: case SIMPLE:
+          while( loops < rexp->loopsMax && text.pos < text.len && (forward = match( rexp )) ){
+            text.pos += forward;
+            loops++;
+          }
+        }
+
+        return loops < rexp->loopsMin ? FALSE : TRUE;
+      }
+
+      static int trackByType( struct RE *rexp, struct RE *track, int type ){
+        if( rexp->len == 0 ) return FALSE;
+
+        *track = *rexp;
+        track->type = type;
+
+        for( int cut, i = 0, deep = 0; (i += walkMeta( rexp->ptr + i )) < rexp->len; i++ ){
+          switch( rexp->ptr[ i ] ){
+          case '(': case '<': deep++; break;
+          case ')': case '>': deep--; break;
+          case '[': i += walkSet( rexp->ptr + i, rexp->len - i ); break;
+          }
+
+          switch( type ){
+          case HOOK    : cut = deep == 0; break;
+          case GROUP   : cut = deep == 0; break;
+          case SET     : cut =              rexp->ptr[i] == ']'; break;
+          case PATH    : cut = deep == 0 && rexp->ptr[i] == '|'; break;
+          }
+
+          if( cut ){
+            track->len  = i;
+            fwrRexp( rexp, i + 1 );
+            if( type != PATH ) fwrRexp( track, 1 );
+            return TRUE;
+          }
+        }
+
+        fwrRexp( rexp, rexp->len );
+        return TRUE;
+      }
+
+      static int tracker( struct RE *rexp, struct RE *track ){
+        if( rexp->len == 0 ) return FALSE;
+
+        switch( *rexp->ptr ){
+        case ':': trackByLen ( rexp, track, 2, META  ); break;
+        case '.': trackByLen ( rexp, track, 1, POINT ); break;
+        case '(': trackByType( rexp, track,    GROUP ); break;
+        case '<': trackByType( rexp, track,    HOOK  ); break;
+        case '[': trackByType( rexp, track,    SET   ); break;
+        default :
+          for( int i = 1; i < rexp->len; i++ )
+            switch( rexp->ptr[ i ] ){
+            case '(': case '<': case '[': case ':': case '.':
+              trackByLen( rexp, track, i, SIMPLE  ); goto getLM;
+            case '?': case '+': case '*': case '{': case '-': case '#':
+              if( i == 1 ){
+                if( rexp->ptr[i] == '-' ) trackByLen( rexp, track, 3, RANGEAB );
+                else                      trackByLen( rexp, track, 1, SIMPLE  );
+              } else                      trackByLen( rexp, track, i - 1, SIMPLE  );
+              goto getLM;
+            }
+
+          trackByLen( rexp, track, rexp->len, SIMPLE  );
+        }
+
+       getLM:
+        getLoops( rexp, track );
+        getMods ( rexp, track );
+        return TRUE;
+      }
+
+      static void trackByLen( struct RE *rexp, struct RE *track, int len, int type ){
+        *track       = *rexp;
+        track->type  = type;
+        track->len   = len;
+        fwrRexp( rexp, len );
+      }
+
+      static void fwrRexp( struct RE *rexp, int len ){
+        rexp->ptr += len; rexp->len -= len;
+      }
+
+      static int walkSet( char *str, int len ){
+        for( int i = 0; (i += walkMeta( str + i )) < len; i++ )
+          if( str[i] == ']' ) return i;
+
+        return len;
+      }
+
+      static int walkMeta( char *str ){
+        for( int i = 0; ; i += 2 )
+          if( str[i] != ':' ) return i;
+      }
+
+      static void getMods( struct RE *rexp, struct RE *track ){
+        int inMods = *rexp->ptr == '#', pos = 0;
+
+        while( inMods )
+          switch( rexp->ptr[ ++pos ] ){
+          case '^': track->mods |=  MOD_ALPHA     ; break;
+          case '$': track->mods |=  MOD_OMEGA     ; break;
+          case '?': track->mods |=  MOD_LONLEY    ; break;
+          case '~': track->mods |=  MOD_FwrByChar ; break;
+          case '*': track->mods |=  MOD_COMMUNISM ; break;
+          case '/': track->mods &= ~MOD_COMMUNISM ; break;
+          default : inMods       =  FALSE         ; break;
+          }
+
+        fwrRexp( rexp, pos );
+      }
+
+      static void getLoops( struct RE *rexp, struct RE *track ){
+        track->loopsMin = 1; track->loopsMax = 1;
+
+        if( rexp->len )
+          switch( *rexp->ptr ){
+          case '?' : track->loopsMin = 0; track->loopsMax =   1; fwrRexp( rexp, 1 ); return;
+          case '+' : track->loopsMin = 1; track->loopsMax = INF; fwrRexp( rexp, 1 ); return;
+          case '*' : track->loopsMin = 0; track->loopsMax = INF; fwrRexp( rexp, 1 ); return;
+          case '{' : fwrRexp( rexp, 1 );
+            track->loopsMin = atoi( rexp->ptr );
+            fwrRexp( rexp, countCharDigits( rexp->ptr ) );
+            if( *rexp->ptr == ',' ){
+              fwrRexp( rexp, 1 );
+              if( *rexp->ptr == '}' )
+                track->loopsMax = INF;
+              else {
+                track->loopsMax = atoi( rexp->ptr );
+                fwrRexp( rexp, countCharDigits( rexp->ptr  ) );
+              }
+            } else track->loopsMax = track->loopsMin;
+
+            fwrRexp( rexp, 1 );
+          }
+      }
+
+      static int countCharDigits( char *str ){
+        for( int digits = 0; ; digits++ )
+          if( isdigit( *str++ ) == 0 ) return digits;
+      }
+
+      static int match( struct RE *rexp ){
+        switch( rexp->type ){
+        case POINT  : return text.pos < text.len;
+        case SET    : return matchSet  ( *rexp );
+        case RANGEAB: return matchRange( rexp, text.ptr[text.pos]  );
+        case META   : return matchMeta ( rexp, text.ptr[text.pos]  );
+        default     : return matchText ( rexp, text.ptr + text.pos );
+        }
+      }
+
+      static char * strnChr( char *str, int chr, int n ){
+        for( int i = 0; i < n && str[ i ]; i++ )
+          if( str[ i ] == chr ) return str + i;
+
+        return 0;
+      }
+
+      static int cmpChrCommunist( char a, char b){
+        a = tolower(a);
+        b = tolower(b);
+        return a == b;
+      }
+
+      static char * strnChrCommunist( char *str, int chr, int n ){
+        for( int i = 0; i < n && str[ i ]; i++ )
+          if( cmpChrCommunist( str[i], chr ) ) return str + i;
+
+        return 0;
+      }
+
+      static int strnCmpCommunist( char *s, char *t, int n ){
+        for( ; cmpChrCommunist( *s, *t ); s++, t++ )
+          if( *s == '\0' || --n <= 0 ) return 0;
+
+        return *s - *t;
+      }
+
+      static int matchText( struct RE *rexp, char *txt ){
+        if( rexp->mods & MOD_COMMUNISM )
+          return    strnCmpCommunist( txt, rexp->ptr, rexp->len )  == 0 ? rexp->len : 0;
+        else return strncmp         ( txt, rexp->ptr, rexp->len )  == 0 ? rexp->len : 0;
+      }
+
+      static int matchRange( struct RE *rexp, int chr ){
+        if( rexp->mods & MOD_COMMUNISM ){
+          chr = tolower( chr );
+          return chr >= tolower( rexp->ptr[ 0 ] ) && chr <= tolower( rexp->ptr[ 2 ] );
+        } else
+          return chr >=          rexp->ptr[ 0 ]   && chr <=          rexp->ptr[ 2 ];
+      }
+
+      static int matchMeta( struct RE *rexp, int chr ){
+        switch( rexp->ptr[1] ){
+        case 'a' : return isalpha( chr ) != 0;
+        case 'A' : return isalpha( chr ) == 0;
+        case 'd' : return isdigit( chr ) != 0;
+        case 'D' : return isdigit( chr ) == 0;
+        case 'w' : return isalnum( chr ) != 0;
+        case 'W' : return isalnum( chr ) == 0;
+        case 's' : return isspace( chr ) != 0;
+        case 'S' : return isspace( chr ) == 0;
+        default  : return rexp->ptr[1] == chr;
+        }
+      }
+
+      static int matchSet( struct RE rexp ){
+        struct RE track;
+        int result  = 0, reverse = *rexp.ptr == '^';
+
+        if( reverse ) fwrRexp( &rexp, 1 );
+
+        while( tracker( &rexp, &track ) ){
+          switch( track.type ){
+          case RANGEAB: case META: case POINT:
+            result = match( &track ); break;
+          default:
+            if( track.mods & MOD_COMMUNISM )
+                 result = strnChrCommunist( track.ptr, text.ptr[ text.pos ], track.len  ) != 0;
+            else result = strnChr         ( track.ptr, text.ptr[ text.pos ], track.len  ) != 0;
+          }
+
+          if( result ) return reverse ? FALSE : result;
+        }
+
+        return reverse ? TRUE : FALSE;
+      }
+    < src..
+
+    ahora todo constructor puede contener modificadores, por tanto, se
+    agrego una nueva varible a la estructura @c(RE):
+
+    ..src > c
+      unsigned char mods;
+    < src..
+
+    Ya que en esencia un modificador no deja de ser una simple @"(bandera), para
+    economizar almacenamiento utilizaremos @c(mods) como una mascara de
+    bits. Esto obliga a declarar la variable como tipo @c(unsigned).
+
+    Al declarar @c(mods) como @c(char) nos proporciona ocho bits, es decir,
+    disponemos de 8 modificaciones, pero de momento solo vamos a utilizar 5.
+
+    Para activar o desactivar cada bit de forma independiente, necesitamos
+    conocer el valor que representa la posicion del bit a modificar. Esto se
+    logra elevando 2 a la posicion del bit. Asi el primer bit es @m(2^0 = 1), el
+    segundo @m(2^1 = 2), el tercero @m(2^2 = 4) y asi sucesivamente.
+
+    Recordar la posicion de cada modificador, no es lo mas conveniete, en su
+    lugar utilizamos constantes de preprocesador:
+
+    ..src > c
+      #define MOD_ALPHA            1
+      #define MOD_OMEGA            2
+      #define MOD_LONLEY           4
+      #define MOD_FwrByChar        8
+      #define MOD_COMMUNISM       16
+    < src..
+
+    @c(MOD_ALPHA), signo @c(^) sera el modificador @"(busca al inicio).
+
+    @c(MOD_OMEGA), signo @c($) sera el modificador @"(busca al final).
+
+    @c(MOD_LONLEY), signo @c(?) sera el modificador @"(detener con la primer coincidencia).
+
+    @c(MOD_FwrByChar), signo @c(~) sera el modificador @"(busca caracter a
+    caracter. Si hay una coincidencia no continues al final de esta, prueba con
+    el caracter imediatamente despues del que utilizaste para este ciclo).
+
+    @c(MOD_COMMUNISM), signo @c(*) sera el modificador @"(ignora entre
+    mayusculas y minusculas.
+
+    finalmente signo @c(/), apaga el bit @c(MOD_COMMUNISM) para decir @"(no
+    ignores entre mayusculas y minusculas), que es el comportamiento por
+    defecto. Tenemos 6 modificadores por el precio de 5!
+
+    si los signos que he eligido no son de tu agrado, se pueden modificar sin
+    despeinarse en la funcion @c(getMods). Como su nombre indica, optiene los
+    modificadores... y los asigna a un constructor:
+
+    ..src > c
+      static void getMods( struct RE *rexp, struct RE *track ){
+        int inMods = *rexp->ptr == '#', pos = 0;             // ➊
+
+        while( inMods )                                      // ➋
+          switch( rexp->ptr[ ++pos ] ){                      // ➌
+          case '^': track->mods |=  MOD_ALPHA     ; break;
+          case '$': track->mods |=  MOD_OMEGA     ; break;
+          case '?': track->mods |=  MOD_LONLEY    ; break;
+          case '~': track->mods |=  MOD_FwrByChar ; break;
+          case '*': track->mods |=  MOD_COMMUNISM ; break;
+          case '/': track->mods &= ~MOD_COMMUNISM ; break;
+          default : inMods       =  FALSE         ; break;   // ➍
+          }
+
+        if( pos > 0 ) fwrTrack( rexp, pos );                 // ➎
+      }
+    < src..
+
+    El funcionamiento se basa en el mismo principio que @c(getLoops), lo que
+    significa que si el constructor posee algun modificador, deberia encontrarse
+    en la posicion inicial de @c(rexp) ➊. De ser asi, recorremos y asignamos los
+    valores en la cadena de modificadores ➋➌ hasta que el signo en cuestion no
+    se identifique como un modificador ➍. Una vez que optenemos la informacion, la
+    cadena de mods se descarta ➎.
+
+    Por cierto, antes de modificar o agregar nuevos mods, considera la sintaxis
+    actual, mal negocio seria agregar los signos @c(|), @c[(], @c[)], ..., etc.
+
+    Como hacemos para otener los mods de los constructores? (¬‿¬) je, recuerdas
+    que vamos a colocar los modificadores despues de los cuantificadores?
+    (pista: en que funcion esta @c(getLoops)?)
+
+    ..src > c
+       static int tracker( struct RE *rexp, struct RE *track ){
+        if( rexp->len == 0 ) return FALSE;
+
+        switch( *rexp->ptr ){
+        case ':': trackByLen ( rexp, track, 2, META  ); break;
+        case '.': trackByLen ( rexp, track, 1, POINT ); break;
+        case '(': trackByType( rexp, track,    GROUP ); break;
+        case '<': trackByType( rexp, track,    HOOK  ); break;
+        case '[': trackByType( rexp, track,    SET   ); break;
+        default :
+          for( int i = 1; i < rexp->len; i++ )
+            switch( rexp->ptr[ i ] ){
+            case '(': case '<': case '[': case ':': case '.':
+              trackByLen( rexp, track, i, SIMPLE  ); goto getLM;
+            case '?': case '+': case '*': case '{': case '-': case '#': // ➊
+              if( i == 1 ){
+                if( rexp->ptr[i] == '-' ) trackByLen( rexp, track, 3, RANGEAB );
+                else                      trackByLen( rexp, track, 1, SIMPLE  );
+              } else                      trackByLen( rexp, track, i - 1, SIMPLE  );
+              goto getLM;
+            }
+
+          trackByLen( rexp, track, rexp->len, SIMPLE  );
+        }
+
+       getLM: // ➋
+        getLoops( rexp, track );
+        getMods ( rexp, track );
+        return TRUE;
+      }
+    < src..
+
+    Exacto! agregamos @c(getMods) ➋ inmediatamente despues de @c(getLoops), el
+    resto solo es colocar un nuevo signo en los casos de @"(corte) ➊➋. Vuala!
+    cada constructor cargara sus mods! o no... Mira bien el comportamiento de las
+    dos funciones @c(get), toma tu tiempo.
+
+    Notas la diferencia? @c(getLoops) siempre establece valores por defecto. Por
+    su parte @c(getMods) se limita a modificar los valores que indiquemos, y
+    como todos los constructores inician como copias de un constructor @e(de
+    orden superior) (el primero en @c(regexp3)) no puede significar otra cosa
+    mas que los modificadores se heredan. Si establecemos algun modificador en
+    el constructor primigenio sera transmitido a todos sus descendientes.
+
+    ..src > c
+      unsigned int regexp3( char *txt, char *re ){
+        struct RE    rexp;
+        rexp.ptr     = re;
+        rexp.type    = PATH;
+        rexp.mods    = 0;         // ➊
+        rexp.len     = strlen( re );
+        text.len     = strlen( txt );
+
+        if( text.len == 0 || rexp.len == 0 ) return 0;
+
+        getMods( &rexp, &rexp );  // ➋
+
+        int result = 0, txtLen = text.len;
+        for( int forward, i = 0, loops = rexp.mods & MOD_ALPHA ? 1 : text.len; i < loops; i += forward ){  // ➌
+          forward    = 1;
+          text.pos   = 0;
+          text.ptr   = txt    + i;
+          text.len   = txtLen - i;
+
+          if( walker( rexp ) ){
+            if     (  rexp.mods & MOD_OMEGA    ){ if( text.pos == text.len ) return TRUE; }  // ➍
+            else if(  rexp.mods & MOD_LONLEY   )                             return TRUE;    // ➎
+            else if( (rexp.mods & MOD_FwrByChar) || text.pos == 0 )          result++;       // ➏
+            else   {  forward = text.pos;                                    result++; }     // ➐
+          }
+        }
+
+        return result;
+      }
+    < src..
+
+    El constructor fundamental, inicia con ningun modifidor ➊. Los modificadores
+    que en este sean establecidos ➋, tendran un alcance global, claro, siempre y
+    cuando tengamos codigo para una tarea especifica, por ejemplo, podemos aplicar los
+    modificadores @c(^) o @c($) o @c(?) o @c(~) al primer constructor y luego
+    ignorarlos en todos sus descendientes, al fin y al cabo, solo nos importan
+    para modificar el comportamiento del ciclo por la cadena ➌.
+
+    Veamos a detalle las alteraciones principales:
+
+    Si tenemos el bit @c(MOD_ALPHA) encendido, aplicamos solo un ciclo (primera
+    posicion de la cadena) ➌.
+
+    Si hay una coincidencia y el bit @c(MOD_OMEGA) esta encendido comprobamos
+    que la coincidencia abarque el resto de la cadena, si es asi tenemos la
+    coincidencia que buscamos ➍.
+
+    Si la coincidencia ocurre con el bit @c(MOD_LONLEY) activo, detenemos la
+    busqueda con la primer coincidencia ➎.
+
+    Si el bit activo es @c(MOD_FwrByChar) o la longitud de la captura es de 0
+    caracteres (que ocacionarian bucles infinitos), la busqueda continuara en la
+    posicion siguiente ➏.
+
+    Si no hay ningun modificador, simplemente incrementamos el contador de
+    coincidencias y la sigiente posicion del ciclo por la cadena estara al final
+    de la coincidencia ➐.
+
+    Para terminar, tenemos un modificador que afecta el comportamiento de los
+    constructores de formo individual, el @c(MOD_COMMUNISM). Hace que los
+    caracteres alfabeticos coincidan tanto con mayusculas como con
+    minisculas. Cuando asignamos el mod de forma global se transmite a todos los
+    constructores, por ello existe el @b(MOD CAPITALISTA), su funcion es
+    terminar con la igualdad, de hecho este es el comportamiento por defecto.
+
+    Naturalmente, dicho mod sera aplicado en las fuciones de busqueda
+
+    ..src > c
+      static int matchText( struct RE *rexp, char *txt ){
+        if( rexp->mods & MOD_COMMUNISM )     // ➊
+          return    strnCmpCommunist( txt, rexp->ptr, rexp->len )  == 0 ? rexp->len : 0;
+        else return strncmp         ( txt, rexp->ptr, rexp->len )  == 0 ? rexp->len : 0;
+      }
+    < src..
+
+    ..src > c
+      static int matchRange( struct RE *rexp, int chr ){
+        if( rexp->mods & MOD_COMMUNISM ){    // ➋
+          chr = tolower( chr );
+          return chr >= tolower( rexp->ptr[ 0 ] ) && chr <= tolower( rexp->ptr[ 2 ] );
+        } else
+          return chr >=          rexp->ptr[ 0 ]   && chr <=          rexp->ptr[ 2 ];
+      }
+    < src..
+
+    ..src > c
+      static int matchSet( struct RE rexp ){
+        struct RE track;
+        int result  = 0, reverse = *rexp.ptr == '^';
+
+        if( reverse ) fwrTrack( &rexp, 1 );
+
+        while( tracker( &rexp, &track ) ){
+          switch( track.type ){
+          case RANGEAB: case META: case POINT:
+            result = match( &track ); break;
+          default:
+            if( track.mods & MOD_COMMUNISM ) // ➌
+                 result = strnChrCommunist( track.ptr, text.ptr[ text.pos ], track.len  ) != 0;
+            else result = strnChr         ( track.ptr, text.ptr[ text.pos ], track.len  ) != 0;
+          }
+
+          if( result ) return reverse ? FALSE : result;
+        }
+
+        return reverse ? TRUE : FALSE;
+      }
+    < src..
+
+    Unicamente necesitamos conocer el estado del modificador ➊➋➌, luego, con
+    ayuda de tres nuevas funciones (examinalas por tu cuenta) realizamos la
+    busqueda segun sea el caso.
+
+    Como puedes apreciar, ahora los constructores de tipo @c(RANGEAB) tienen su
+    propia funcion. Es demasido extensa como para permanecer en @c(match). En
+    cambio @c(matchMeta) no fue afectado, ninguno de los metacaracteres
+    definidos requiere cambios.
+
+    Antes de concluir verificamos que las prubebas previas no presenten errores y
+    agregamos una cuantas mas:
+
+    ..src > c
+      NTEST( "ABC", "#^A", 1 );
+      NTEST( "ABC", "#^AB", 1 );
+      NTEST( "ABC", "#^ABC", 1 );
+      NTEST( "ABC", "#^(b|A)", 1 );
+      NTEST( "ABC", "#^A(B|C)(B|C)", 1 );
+      NTEST( "ABC", "#^(A(B|C))(B|C)", 1 );
+      NTEST( "ABC", "#$C", 1 );
+      NTEST( "ABC", "#$BC", 1 );
+      NTEST( "ABC", "#$ABC", 1 );
+      NTEST( "ABC", "#$(b|C)", 1 );
+      NTEST( "ABC", "#$A(B|C)(B|C)", 1 );
+      NTEST( "ABC", "#$(A(B|C))(B|C)", 1 );
+      NTEST( "ABC", "#^$ABC", 1 );
+      NTEST( "ABC", "#^$A(c|B)(b|C)", 1 );
+      NTEST( "ABC", "#^$A(B|C)(B|C)", 1 );
+      NTEST( "ABC", "#^$(A(B|C))(B|C)", 1 );
+
+      NTEST( "ABC", "#^E", 0 );
+      NTEST( "ABC", "#^EB", 0 );
+      NTEST( "ABC", "#^EBC", 0 );
+      NTEST( "ABC", "#^(b|c)", 0 );
+      NTEST( "ABC", "#^A(B|C)(B|E)", 0 );
+      NTEST( "ABC", "#^(A(B|C))(B|E)", 0 );
+      NTEST( "ABC", "#$E", 0 );
+      NTEST( "ABC", "#$BE", 0 );
+      NTEST( "ABC", "#$ABE", 0 );
+      NTEST( "ABC", "#$(b|E)", 0 );
+      NTEST( "ABC", "#$A(B|C)(B|E)", 0 );
+      NTEST( "ABC", "#$(A(B|C))(B|E)", 0 );
+      NTEST( "ABC", "#^$ABE", 0 );
+      NTEST( "ABC", "#^$A(c|B)(b|E)", 0 );
+      NTEST( "ABC", "#^$A(B|C)(B|E)", 0 );
+      NTEST( "ABC", "#^$(A(B|C))(B|E)", 0 );
+
+      NTEST( "A", "a#*", 1 );
+      NTEST( "A", "a?#*", 1 );
+      NTEST( "A", "b?#*", 1 );
+      NTEST( "A", "a+#*", 1 );
+      NTEST( "A", "a*#*", 1 );
+      NTEST( "A", "b*#*", 1 );
+      NTEST( "aAa", "a#*", 3 );
+      NTEST( "aAa", "a+#*", 1 );
+      NTEST( "aAa", "a*#*", 1 );
+      NTEST( "aAa", "a+#*", 1 );
+      NTEST( "aAa", "a?#*", 3 );
+      NTEST( "aAab", "a+#*", 1 );
+      NTEST( "aAab", "a*#*", 2 );
+      NTEST( "aAab", "a?#*", 4 );
+      NTEST( "aAab", "a+#*?^$~b", 1 );
+      NTEST( "aAab", "a*#*?^$~b", 1 );
+      NTEST( "aAab", "a?#*?^$~b", 1 );
+      NTEST( "aAab", "a+#*?^$~b?", 1 );
+      NTEST( "aAab", "a*#*?^$~b?", 1 );
+      NTEST( "aAab", "a?#*?^$~b?", 3 );
+      NTEST( "aAab", "a+#*?^$~b+", 1 );
+      NTEST( "aAab", "a*#*?^$~b+", 1 );
+      NTEST( "aAab", "a?#*?^$~b+", 1 );
+      NTEST( "aAab", "a+#*?^$~b*", 1 );
+      NTEST( "aAab", "a*#*?^$~b*", 1 );
+      NTEST( "aAab", "a?#*?^$~b*", 3 );
+
+      NTEST( "a", "a#*", 1 );
+      NTEST( "a", "A#*", 1 );
+      NTEST( "a", "#*A", 1 );
+      NTEST( "a", "#*a", 1 );
+      NTEST( "a", "#*(A)", 1 );
+      NTEST( "a", "#*(a)", 1 );
+      NTEST( "a", "#*[A]", 1 );
+      NTEST( "a", "#*[a]", 1 );
+      NTEST( "a", "#*A-Z", 1 );
+      NTEST( "a", "A-Z#*", 1 );
+      NTEST( "a", "(a)#*", 1 );
+      NTEST( "a", "(A)#*", 1 );
+      NTEST( "a", "[a]#*", 1 );
+      NTEST( "a", "[A]#*", 1 );
+      NTEST( "a", "#*[A-Z]", 1 );
+      NTEST( "a", "[A-Z]#*", 1 );
+
+      NTEST( "aAaA", "a#*", 4 );
+      NTEST( "aAaA", "A#*", 4 );
+      NTEST( "aAaA", "#*A", 4 );
+      NTEST( "aAaA", "#*a", 4 );
+      NTEST( "aAaA", "#*(A)", 4 );
+      NTEST( "aAaA", "#*(a)", 4 );
+      NTEST( "aAaA", "#*[A]", 4 );
+      NTEST( "aAaA", "#*[a]", 4 );
+      NTEST( "aAaA", "#*A-Z", 4 );
+      NTEST( "aAaA", "A-Z#*", 4 );
+      NTEST( "aAaA", "(a)#*", 4 );
+      NTEST( "aAaA", "(A)#*", 4 );
+      NTEST( "aAaA", "[a]#*", 4 );
+      NTEST( "aAaA", "[A]#*", 4 );
+      NTEST( "aAaA", "#*[A-Z]", 4 );
+      NTEST( "aAaA", "[A-Z]#*", 4 );
+      NTEST( "aAaA", "(a#*)", 4 );
+      NTEST( "aAaA", "(A#*)", 4 );
+      NTEST( "aAaA", "(a)#*", 4 );
+      NTEST( "aAaA", "(A)#*", 4 );
+      NTEST( "aAbB", "#*a|b", 4 );
+      NTEST( "aAbB", "#*A|B", 4 );
+      NTEST( "aAbB", "#*(a|b)", 4 );
+      NTEST( "aAbB", "#*(A|B)", 4 );
+      NTEST( "aAbB", "(a#*|b#*)", 4 );
+      NTEST( "aAbB", "(A#*|B#*)", 4 );
+      NTEST( "aAbB", "(a|b)#*", 4 );
+      NTEST( "aAbB", "(A|B)#*", 4 );
+      NTEST( "TesT", "test", 0 );
+      NTEST( "TesT", "test#*", 0 );
+      NTEST( "TesT", "t#*est#*", 1 );
+      NTEST( "TesT", "#*test", 1 );
+      NTEST( "TesT", "#*tESt", 1 );
+      NTEST( "TesT", "#*(tESt)", 1 );
+      NTEST( "TesT", "(tESt)#*", 1 );
+
+      NTEST( "a aaa aaa", "#^aaa", 0 );
+      NTEST( "a aaa aaa", "#$aaa", 1 );
+      NTEST( "a aaa aaa", "#?aaa", 1 );
+      NTEST( "a aaa aaa", "#~aaa", 2 );
+      NTEST( "a aaa aaa", "#^?aaa", 0 );
+      NTEST( "a aaa aaa", "#?^aaa", 0 );
+      NTEST( "a aaa aaa", "#?$aaa", 1 );
+      NTEST( "a aaa aaa", "#^?$aaa", 0 );
+      NTEST( "a aaa aaa", "#?$^aaa", 0 );
+      NTEST( "a aaa aaa", "#^?$a aaa aaa", 1 );
+      NTEST( "aa aaaa aaaa", "#~a", 10 );
+      NTEST( "aa aaaa aaaa", "#~aa", 7 );
+      NTEST( "aa aaaa aaaa", "#~aaa", 4 );
+      NTEST( "aaaaaaaaaaaaaaaaaaaa", "#?a+", 1 );
+      NTEST( "abababababababababababababababababababab", "#?a+" , 1 );
+      NTEST( "aaaaaaaaaaaaaaaaaaaa", "#~a+", 20 );
+      NTEST( "abababababababababababababababababababab", "#~a+" , 20 );
+
+      NTEST( "Raptor TesT Fest", "RapTor (tESt)#* fEST", 0 );
+      NTEST( "Raptor TesT Fest", "#*rapTor (tESt) fEST", 1 );
+      NTEST( "Raptor TesT Fest", "(RapTor)#* (tESt)#* (fEST)#*", 1 );
+      NTEST( "Raptor TesT Fest", "((Rap#*Tor)#* (t#*ESt)#* (fEST)#*)#*", 1 );
+      NTEST( "Raptor TesT Fest", "#*a-z#*apTor (tESt) A-Z#*EST", 1 );
+
+      NTEST( "a", "a#/", 1 );
+      NTEST( "a", "A#/", 0 );
+      NTEST( "a", "#/A", 0 );
+      NTEST( "a", "#/a", 1 );
+      NTEST( "a", "#/(A)", 0 );
+      NTEST( "a", "#/(a)", 1 );
+      NTEST( "a", "#/[A]", 0 );
+      NTEST( "a", "#/[a]", 1 );
+      NTEST( "a", "#/A-Z", 0 );
+      NTEST( "a", "A-Z#/", 0 );
+      NTEST( "a", "(a)#/", 1 );
+      NTEST( "a", "(A)#/", 0 );
+      NTEST( "a", "[a]#/", 1 );
+      NTEST( "a", "[A]#/", 0 );
+      NTEST( "a", "#/[A-Z]", 0 );
+      NTEST( "a", "[A-Z]#/", 0 );
+
+      NTEST( "aAaA", "a#/", 2 );
+      NTEST( "aAaA", "A#/", 2 );
+      NTEST( "aAaA", "#/A", 2 );
+      NTEST( "aAaA", "#/a", 2 );
+      NTEST( "aAaA", "#/(A)", 2 );
+      NTEST( "aAaA", "#/(a)", 2 );
+      NTEST( "aAaA", "#/[A]", 2 );
+      NTEST( "aAaA", "#/[a]", 2 );
+      NTEST( "aAaA", "#/A-Z", 2 );
+      NTEST( "aAaA", "A-Z#/", 2 );
+      NTEST( "aAaA", "(a)#/", 2 );
+      NTEST( "aAaA", "(A)#/", 2 );
+      NTEST( "aAaA", "[a]#/", 2 );
+      NTEST( "aAaA", "[A]#/", 2 );
+      NTEST( "aAaA", "#/[A-Z]", 2 );
+      NTEST( "aAaA", "[A-Z]#/", 2 );
+      NTEST( "aAaA", "(a#/)", 2 );
+      NTEST( "aAaA", "(A#/)", 2 );
+      NTEST( "aAaA", "(a)#/", 2 );
+      NTEST( "aAaA", "(A)#/", 2 );
+      NTEST( "aAbB", "#/a|b", 2 );
+      NTEST( "aAbB", "#/A|B", 2 );
+      NTEST( "aAbB", "#/(a|b)", 2 );
+      NTEST( "aAbB", "#/(A|B)", 2 );
+      NTEST( "aAbB", "(a#/|b#/)", 2 );
+      NTEST( "aAbB", "(A#/|B#/)", 2 );
+      NTEST( "aAbB", "(a|b)#/", 2 );
+      NTEST( "aAbB", "(A|B)#/", 2 );
+
+      NTEST( "Raptor TesT Fest", "#*rapTor (tESt)#/ fEST", 0 );
+      NTEST( "Raptor tESt Fest", "#*rapTor (tESt)#/ fEST", 1 );
+      NTEST( "Raptor TesT Fest", "#*rapTor (tE#/S#/t)#* fEST", 0 );
+      NTEST( "Raptor tESt Fest", "#*rapTor (tE#/S#/t)#* fEST", 1 );
+    < src..
+
 *** @c(CATCH)
 *** backreferences
 *** Stand Alone Complex

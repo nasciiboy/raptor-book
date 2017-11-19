@@ -2456,7 +2456,7 @@ match    OK                    rexp[gh]                └──▶ comparacion
 <p>Ninguna bateria de pruebas es suficiente, siempre pueden presentarse casos imprevistos, por ejemplo, como reaciona el motor ante un conjunto o una ruta vacia? que deberia hacer cuando la cadena o la regexp son apuntadores nulos? despues de una coincidencia deberia consultarse el siguiente caracter de la cadena o continuar al final de la coincidencia?</p>
 <p>Las respuestas a estos misterios y mucho mas, en el proximo capitulo!</p>
 <div class="about" >
-<div class="about-dt" >PD</div>
+<div class="about-dt" >Nota</div>
 <div class="about-dd" >
 <p>Apartir de la siguiente seccion, eliminare todos los mensajes que se producen en <span class="file" >regexp3.h</span>, son bastate molestos. Podrian suprimirse colocando el codigo dentro de directivas de compilacion condicional... pero cosidero que esto solo enturbia la estructura del codigo.</p>
 <p>Una vez te familiarices con el codigo, no necesitaras mas mensajes que los que se producen en las pruebas.</p>
@@ -3995,6 +3995,834 @@ match    OK                    rexp[gh]                └──▶ comparacion
 </code></pre>
 </div>
 <h4 id="mods" >mods</h4>
+<div class="hBody-4" >
+<p>Esta prehistorica creacion ya puede conseguir presas por su cuenta, aun asi requiere un poco mas de entrenamiento antes de ascender a las grades ligas de los motores RegExp.</p>
+<p>La kata de esta seccion nos trasmite una tecnica prohibida en los dojos regexp mas ortodoxos, el <em>agua control</em>, la habilidad de adaptarse facilmente a distintas situaciones.</p>
+<p>Nuestro motor contabiliza todas las coincidencias de la regexp, pero, y si:</p>
+<ul>
+<li>
+<p>quisieramos detener la busqueda tras la primer coincidencia,</p>
+</li>
+<li>
+<p>o indicar que la coincidencia debe aparecer al final de la cadena,</p>
+</li>
+<li>
+<p>o al inicio,</p>
+</li>
+<li>
+<p>o modificar el comportamiento de un constructor,</p>
+</li>
+<li>
+<p>o de la expresion entera,</p>
+</li>
+<li>
+<p>o cualquer otra situacion extravagante y arbitraria?</p>
+</li>
+</ul>
+<p>Habitualmente los motores regexeros ofrecen las siguentes soluciones a este dilema:</p>
+<ol class="num" >
+<li>
+<p>utilizar funciones especializadas</p>
+</li>
+<li>
+<p>extender la sintaxis</p>
+</li>
+<li>
+<p>agregar parametros en la funcion principal</p>
+</li>
+<li>
+<p>o una combinacion con todas las anteriores</p>
+</li>
+</ol>
+<p>De estas, la solucion que mas se utiliza es <em>extender la sintaxis</em>. Supongo, es lo mas sencillo y facil de mantener. Particularmente se aplica a tres casos concretos:</p>
+<ul>
+<li>
+<p>Si el primer signo de la expresion es <code>^</code>, se indica al motor que la busqueda ha de realizarse solo en la primer posicion de la cadena</p>
+</li>
+<li>
+<p>Si el ultimo signo de la expresion es <code>$</code>, se indica al motor que la coincidencia debe <q>emparejarse</q> con el final de la cadena.</p>
+</li>
+<li>
+<p>Si la cadena inicia con <code>^</code> y termina con <code>$</code> se le indica al motor que realice una busqueda solo en la primer posicion de la cadena y que la coincidencia debe abarcar toda la cadena</p>
+</li>
+</ul>
+<p>Extender la sintaxis en nuestro codigo para dar soporte a los signos <code>^</code> y <code>$</code> apenas y requiere una ligera modifacacion en <code>regexp3</code></p>
+<pre class="code" ><code class="chroma" ><span class="kt">unsigned</span> <span class="kt">int</span> <span class="nf">regexp3</span><span class="p">(</span> <span class="kt">char</span> <span class="o">*</span><span class="n">txt</span><span class="p">,</span> <span class="kt">char</span> <span class="o">*</span><span class="n">re</span> <span class="p">){</span>
+  <span class="k">struct</span> <span class="n">RE</span>    <span class="n">rexp</span><span class="p">;</span>
+  <span class="kt">int</span> <span class="n">result</span>   <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="kt">int</span> <span class="n">atTheEnd</span> <span class="o">=</span> <span class="n">FALSE</span><span class="p">;</span>                     <span class="c1">// ➊
+</span><span class="c1"></span>  <span class="kt">int</span> <span class="n">loops</span>    <span class="o">=</span> <span class="n">strlen</span><span class="p">(</span> <span class="n">txt</span> <span class="p">);</span>             <span class="c1">// ➋
+</span><span class="c1"></span>  <span class="n">rexp</span><span class="p">.</span><span class="n">ptr</span>     <span class="o">=</span> <span class="n">re</span><span class="p">;</span>
+  <span class="n">rexp</span><span class="p">.</span><span class="n">type</span>    <span class="o">=</span> <span class="n">PATH</span><span class="p">;</span>
+  <span class="n">rexp</span><span class="p">.</span><span class="n">len</span>     <span class="o">=</span> <span class="n">strlen</span><span class="p">(</span> <span class="n">re</span> <span class="p">);</span>
+  <span class="n">text</span><span class="p">.</span><span class="n">len</span>     <span class="o">=</span> <span class="n">loops</span><span class="p">;</span>
+
+  <span class="k">if</span><span class="p">(</span> <span class="n">text</span><span class="p">.</span><span class="n">len</span> <span class="o">==</span> <span class="mi">0</span> <span class="o">||</span> <span class="n">rexp</span><span class="p">.</span><span class="n">len</span> <span class="o">==</span> <span class="mi">0</span> <span class="p">)</span> <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+
+  <span class="k">if</span><span class="p">(</span> <span class="n">rexp</span><span class="p">.</span><span class="n">ptr</span><span class="p">[</span> <span class="n">rexp</span><span class="p">.</span><span class="n">len</span> <span class="o">-</span> <span class="mi">1</span> <span class="p">]</span> <span class="o">==</span> <span class="sa"></span><span class="sc">&#39;$&#39;</span> <span class="p">){</span>    <span class="c1">// ➌
+</span><span class="c1"></span>    <span class="n">atTheEnd</span> <span class="o">=</span> <span class="n">TRUE</span><span class="p">;</span>
+    <span class="n">rexp</span><span class="p">.</span><span class="n">len</span><span class="o">--</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="k">if</span><span class="p">(</span> <span class="o">*</span><span class="n">rexp</span><span class="p">.</span><span class="n">ptr</span> <span class="o">==</span> <span class="sa"></span><span class="sc">&#39;^&#39;</span> <span class="p">){</span>                   <span class="c1">// ➍
+</span><span class="c1"></span>    <span class="n">fwrTrack</span><span class="p">(</span> <span class="o">&amp;</span><span class="n">rexp</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+    <span class="n">loops</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>                              <span class="c1">// ➎
+</span><span class="c1"></span>  <span class="p">}</span>
+
+  <span class="k">for</span><span class="p">(</span> <span class="kt">int</span> <span class="n">forward</span><span class="p">,</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">loops</span><span class="p">;</span> <span class="n">i</span> <span class="o">+=</span> <span class="n">forward</span> <span class="p">){</span>
+    <span class="n">forward</span>    <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="n">text</span><span class="p">.</span><span class="n">pos</span>   <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="n">text</span><span class="p">.</span><span class="n">ptr</span>   <span class="o">=</span> <span class="n">txt</span>           <span class="o">+</span> <span class="n">i</span><span class="p">;</span>
+    <span class="n">text</span><span class="p">.</span><span class="n">len</span>   <span class="o">=</span> <span class="n">strlen</span><span class="p">(</span> <span class="n">txt</span> <span class="p">)</span> <span class="o">-</span> <span class="n">i</span><span class="p">;</span>
+
+    <span class="k">if</span><span class="p">(</span> <span class="n">walker</span><span class="p">(</span> <span class="n">rexp</span> <span class="p">)</span> <span class="p">){</span>                                        <span class="c1">// ➏
+</span><span class="c1"></span>      <span class="k">if</span><span class="p">(</span> <span class="n">atTheEnd</span> <span class="p">){</span> <span class="k">if</span><span class="p">(</span> <span class="n">text</span><span class="p">.</span><span class="n">pos</span> <span class="o">==</span> <span class="n">text</span><span class="p">.</span><span class="n">len</span> <span class="p">)</span> <span class="k">return</span> <span class="n">TRUE</span><span class="p">;</span> <span class="p">}</span>  <span class="c1">// ➐
+</span><span class="c1"></span>      <span class="k">else</span> <span class="p">{</span>                                                     <span class="c1">// ➑
+</span><span class="c1"></span>        <span class="n">result</span><span class="o">++</span><span class="p">;</span>
+        <span class="k">if</span> <span class="p">(</span> <span class="n">text</span><span class="p">.</span><span class="n">pos</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="p">)</span> <span class="n">forward</span> <span class="o">=</span> <span class="n">text</span><span class="p">.</span><span class="n">pos</span><span class="p">;</span>
+      <span class="p">}</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="k">return</span> <span class="n">result</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre>
+<p>Los cambios son sencillos. Para realizar la busqueda en la primer posicion de la cadena (signo <code>^</code> ➍) solo debemos limitar el ciclo de repeticiones a una sola iteraccion ➎. De lo contrario el numero de iteracciones es igual a la longitud de la cadena ➋.</p>
+<p>Si debemos verificar que la coincidencia este al final de la cadena (signo <code>$</code> ➌), y ya que la cantidad de caracteres que forman el patron es desconocido realizamos todas las comprobaciones atraves de la cadena, hasta encontrar una coincidencia ➏. Si la longitud de la coincidencia (<code>text.pos</code>) es igual al tamaño (relativo) de la cadena (<code>text.len</code>) tenemos una coincidencia al final de la cadena ➐. En este caso echamos mano de una nueva variable con nombre <code>atTheEnd</code>, si esta encendida caeremos siempre en este caso ➐, de lo contrario, se lleva a cabo el conteo de coincidencias ➑</p>
+<p>... y el caso con los dos signos <code>^</code> y <code>$</code>? ¡¡¡ho my glob ꒰--■_■-꒱!!! la solucion se presenta por si sola, solo hay un ciclo (<code>loops == 1</code>) y debe abarcar toda la cadena.</p>
+<p>Para probar la eficacia del nuevo cambio intentemos con estas pruebas</p>
+<pre class="code" ><code class="chroma" ><span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;Raptor Test&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;^Raptor&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;Raptor Test&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;Raptor$&#34;</span><span class="p">,</span> <span class="mi">0</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;Raptor Test&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;Test$&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;Raptor Test&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;^Test&#34;</span><span class="p">,</span> <span class="mi">0</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;Raptor Test&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;^Raptor Test$&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+</code></pre>
+<p>Ahora bien, como agregar nuevos modificadores? con nuevos signos especiales? con una varible adicional? unimos todos los modificadores en una mascara de bits? con mas <code>if</code>s?</p>
+<p>٩꒰･ัεั･꒱۶ si agregaramos nuevos signos a los extremos tendriamos que establecer un orden de evaluacion mas elaborado. Por otra parte el metodo de la varible adicional, nos obligaria a establecer valores adicionales en la llamada, aunque su uso fuese anecdotico. Algo similar ocurre si agrupamos las modificaciones en una varible extra en forma de mascara de bits, con el engorroso inconveniente de tener que recordar nombres de constantes (por lo general extensos).</p>
+<p>En cualquier caso estos modificadores operan de forma <em>global</em>, es decir, afectan el comportamiento de toda la expresion. Si quisieramos implementar modificadores a nivel de constructor (como la busqueda inversa en los conjuntos) tendriamos un inconveniente adicional.</p>
+<p>Varios motores utilizan la siguiente sintaxis</p>
+<ul>
+<li>
+<p>c[(?i)] hace que la regexp ignore entre minusculas y mayusculas.</p>
+</li>
+<li>
+<p>c[(?c)] hace que la regexp distinga entre mayusculas y minusculas</p>
+</li>
+<li>
+<p>c[(?:)] no capturar coincidencia</p>
+</li>
+<li>
+<p>c[(?s)] <q>modo de una sola linea</q>. Hace que punto coincida con todos los caracteres, incluido el salto de linea.</p>
+</li>
+</ul>
+<p>Estas y otras <q>opciones de busqueda</q> pueden aplicarse a toda la regexp o a parte de ella. No es imposible incorporarla al raptor, pero seria complicado y roperia el flujo de ejecucion!</p>
+<p>El raptor no teme romper tabus, menos si estan relacionadas con la sintaxis, con tal de mantener el codigo lo mas sencillo posible, vamos a implementar este esquema:</p>
+<div class="example-block" >
+<pre class="example" >constructor-cuantificador-modificador
+</pre>
+</div>
+<p>con esto podemos modificar el comportamiento de los constructores de forma individual, los modificadores se especifican luego de los cuantificadores (si lo hacemos bien podemos unificar cuantificadores y modificadores en una sola sintaxis, claro... si lo hacemos bien).</p>
+<p>Para indicar modificadores que afecten de forma global tendremos este esquema:</p>
+<div class="example-block" >
+<pre class="example" >modificador-regexp
+</pre>
+</div>
+<p>el decir el modificador precede a la expresion.</p>
+<p>Ambos, modificador local, como global seguiran la misma sintaxis: El signo <code>#</code> le indicar al motor la presencia de una secuencia de uno o mas signos con significado especial <q>los modificadores</q>. La cadena de modificadores termina cuando aparece el primer signo no establecido como modificador:</p>
+<div class="art-block" >
+<pre class="art" >#mod_1-mod_2-...-mod_nCualquierConstructor
+▲
+│&lt; modificadores &gt;
+└─ signo de modificador
+</pre>
+</div>
+<p>Si queremos aplicar los modificadores <code>^</code> + <code>$</code> la exprecion seria</p>
+<div class="example-block" >
+<pre class="example" >#^$regexp
+</pre>
+</div>
+<p>para aplicar modificadores a un constructor</p>
+<div class="example-block" >
+<pre class="example" >[conjunto]*#MODS(agrupacion)#MODS
+</pre>
+</div>
+<p>vamos con el codigo</p>
+<pre class="code" ><code class="chroma" ><span class="cp">#include</span> <span class="cpf">&lt;ctype.h&gt;</span><span class="cp">
+</span><span class="cp">#include</span> <span class="cpf">&lt;string.h&gt;</span><span class="cp">
+</span><span class="cp">#include</span> <span class="cpf">&lt;stdlib.h&gt;</span><span class="cp">
+</span><span class="cp"></span>
+<span class="cp">#define TRUE                 1
+</span><span class="cp">#define FALSE                0
+</span><span class="cp">#define INF         1073741824 </span><span class="c1">// 2^30
+</span><span class="c1"></span>
+<span class="cp">#define MOD_ALPHA            1
+</span><span class="cp">#define MOD_OMEGA            2
+</span><span class="cp">#define MOD_LONLEY           4
+</span><span class="cp">#define MOD_FwrByChar        8
+</span><span class="cp">#define MOD_COMMUNISM       16
+</span><span class="cp"></span>
+<span class="k">struct</span> <span class="n">TEXT</span> <span class="p">{</span>
+  <span class="kt">char</span> <span class="o">*</span><span class="n">ptr</span><span class="p">;</span>
+  <span class="kt">int</span>   <span class="n">pos</span><span class="p">;</span>
+  <span class="kt">int</span>   <span class="n">len</span><span class="p">;</span>
+<span class="p">}</span> <span class="k">static</span> <span class="n">text</span><span class="p">;</span>
+
+<span class="k">enum</span> <span class="n">TYPE</span> <span class="p">{</span> <span class="n">PATH</span><span class="p">,</span> <span class="n">GROUP</span><span class="p">,</span> <span class="n">HOOK</span><span class="p">,</span> <span class="n">BACKREF</span><span class="p">,</span> <span class="n">SET</span><span class="p">,</span> <span class="n">RANGEAB</span><span class="p">,</span> <span class="n">META</span><span class="p">,</span> <span class="n">POINT</span><span class="p">,</span> <span class="n">SIMPLE</span> <span class="p">};</span>
+
+<span class="k">struct</span> <span class="n">RE</span> <span class="p">{</span>
+  <span class="kt">char</span>          <span class="o">*</span><span class="n">ptr</span><span class="p">;</span>
+  <span class="kt">int</span>            <span class="n">len</span><span class="p">;</span>
+  <span class="k">enum</span>     <span class="n">TYPE</span>  <span class="n">type</span><span class="p">;</span>
+  <span class="kt">unsigned</span> <span class="kt">char</span>  <span class="n">mods</span><span class="p">;</span>
+  <span class="kt">unsigned</span> <span class="kt">int</span>   <span class="n">loopsMin</span><span class="p">,</span> <span class="n">loopsMax</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="k">static</span> <span class="kt">int</span>  <span class="nf">walker</span>     <span class="p">(</span> <span class="k">struct</span> <span class="n">RE</span>  <span class="n">rexp</span> <span class="p">);</span>
+<span class="k">static</span> <span class="kt">int</span>  <span class="nf">trekking</span>   <span class="p">(</span> <span class="k">struct</span> <span class="n">RE</span> <span class="o">*</span><span class="n">rexp</span> <span class="p">);</span>
+<span class="k">static</span> <span class="kt">int</span>  <span class="nf">looper</span>     <span class="p">(</span> <span class="k">struct</span> <span class="n">RE</span> <span class="o">*</span><span class="n">rexp</span> <span class="p">);</span>
+<span class="k">static</span> <span class="kt">int</span>  <span class="nf">tracker</span>    <span class="p">(</span> <span class="k">struct</span> <span class="n">RE</span> <span class="o">*</span><span class="n">rexp</span><span class="p">,</span> <span class="k">struct</span> <span class="n">RE</span> <span class="o">*</span><span class="n">track</span> <span class="p">);</span>
+<span class="k">static</span> <span class="kt">int</span>  <span class="nf">trackByType</span><span class="p">(</span> <span class="k">struct</span> <span class="n">RE</span> <span class="o">*</span><span class="n">rexp</span><span class="p">,</span> <span class="k">struct</span> <span class="n">RE</span> <span class="o">*</span><span class="n">track</span><span class="p">,</span> <span class="kt">int</span> <span class="n">type</span> <span class="p">);</span>
+<span class="k">static</span> <span class="kt">void</span> <span class="nf">trackByLen</span> <span class="p">(</span> <span class="k">struct</span> <span class="n">RE</span> <span class="o">*</span><span class="n">rexp</span><span class="p">,</span> <span class="k">struct</span> <span class="n">RE</span> <span class="o">*</span><span class="n">track</span><span class="p">,</span> <span class="kt">int</span> <span class="n">len</span><span class="p">,</span> <span class="kt">int</span> <span class="n">type</span> <span class="p">);</span>
+<span class="k">static</span> <span class="kt">void</span> <span class="nf">fwrRexp</span>    <span class="p">(</span> <span class="k">struct</span> <span class="n">RE</span> <span class="o">*</span><span class="n">rexp</span><span class="p">,</span> <span class="kt">int</span> <span class="n">len</span> <span class="p">);</span>
+
+<span class="k">static</span> <span class="kt">void</span> <span class="nf">getMods</span>    <span class="p">(</span> <span class="k">struct</span> <span class="n">RE</span> <span class="o">*</span><span class="n">rexp</span><span class="p">,</span> <span class="k">struct</span> <span class="n">RE</span> <span class="o">*</span><span class="n">track</span> <span class="p">);</span>
+<span class="k">static</span> <span class="kt">void</span> <span class="nf">getLoops</span>   <span class="p">(</span> <span class="k">struct</span> <span class="n">RE</span> <span class="o">*</span><span class="n">rexp</span><span class="p">,</span> <span class="k">struct</span> <span class="n">RE</span> <span class="o">*</span><span class="n">track</span> <span class="p">);</span>
+
+<span class="k">static</span> <span class="kt">int</span>  <span class="nf">match</span>      <span class="p">(</span> <span class="k">struct</span> <span class="n">RE</span> <span class="o">*</span><span class="n">rexp</span> <span class="p">);</span>
+<span class="k">static</span> <span class="kt">int</span>  <span class="nf">matchSet</span>   <span class="p">(</span> <span class="k">struct</span> <span class="n">RE</span>  <span class="n">rexp</span> <span class="p">);</span>
+<span class="k">static</span> <span class="kt">int</span>  <span class="nf">matchRange</span> <span class="p">(</span> <span class="k">struct</span> <span class="n">RE</span> <span class="o">*</span><span class="n">rexp</span><span class="p">,</span> <span class="kt">int</span>   <span class="n">chr</span> <span class="p">);</span>
+<span class="k">static</span> <span class="kt">int</span>  <span class="nf">matchMeta</span>  <span class="p">(</span> <span class="k">struct</span> <span class="n">RE</span> <span class="o">*</span><span class="n">rexp</span><span class="p">,</span> <span class="kt">int</span>   <span class="n">chr</span> <span class="p">);</span>
+<span class="k">static</span> <span class="kt">int</span>  <span class="nf">matchText</span>  <span class="p">(</span> <span class="k">struct</span> <span class="n">RE</span> <span class="o">*</span><span class="n">rexp</span><span class="p">,</span> <span class="kt">char</span> <span class="o">*</span><span class="n">txt</span> <span class="p">);</span>
+
+<span class="k">static</span> <span class="kt">int</span>  <span class="nf">walkMeta</span>       <span class="p">(</span> <span class="kt">char</span> <span class="o">*</span><span class="n">str</span> <span class="p">);</span>
+<span class="k">static</span> <span class="kt">int</span>  <span class="nf">walkSet</span>        <span class="p">(</span> <span class="kt">char</span> <span class="o">*</span><span class="n">str</span><span class="p">,</span> <span class="kt">int</span> <span class="n">len</span> <span class="p">);</span>
+<span class="k">static</span> <span class="kt">int</span>  <span class="nf">countCharDigits</span><span class="p">(</span> <span class="kt">char</span> <span class="o">*</span><span class="n">str</span> <span class="p">);</span>
+
+<span class="kt">unsigned</span> <span class="kt">int</span> <span class="nf">regexp3</span><span class="p">(</span> <span class="kt">char</span> <span class="o">*</span><span class="n">txt</span><span class="p">,</span> <span class="kt">char</span> <span class="o">*</span><span class="n">re</span> <span class="p">){</span>
+  <span class="k">struct</span> <span class="n">RE</span>    <span class="n">rexp</span><span class="p">;</span>
+  <span class="n">rexp</span><span class="p">.</span><span class="n">ptr</span>     <span class="o">=</span> <span class="n">re</span><span class="p">;</span>
+  <span class="n">rexp</span><span class="p">.</span><span class="n">type</span>    <span class="o">=</span> <span class="n">PATH</span><span class="p">;</span>
+  <span class="n">rexp</span><span class="p">.</span><span class="n">mods</span>    <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="n">rexp</span><span class="p">.</span><span class="n">len</span>     <span class="o">=</span> <span class="n">strlen</span><span class="p">(</span> <span class="n">re</span> <span class="p">);</span>
+  <span class="n">text</span><span class="p">.</span><span class="n">len</span>     <span class="o">=</span> <span class="n">strlen</span><span class="p">(</span> <span class="n">txt</span> <span class="p">);</span>
+
+  <span class="k">if</span><span class="p">(</span> <span class="n">text</span><span class="p">.</span><span class="n">len</span> <span class="o">==</span> <span class="mi">0</span> <span class="o">||</span> <span class="n">rexp</span><span class="p">.</span><span class="n">len</span> <span class="o">==</span> <span class="mi">0</span> <span class="p">)</span> <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+
+  <span class="n">getMods</span><span class="p">(</span> <span class="o">&amp;</span><span class="n">rexp</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">rexp</span> <span class="p">);</span>
+
+  <span class="kt">int</span> <span class="n">result</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">txtLen</span> <span class="o">=</span> <span class="n">text</span><span class="p">.</span><span class="n">len</span><span class="p">;</span>
+  <span class="k">for</span><span class="p">(</span> <span class="kt">int</span> <span class="n">forward</span><span class="p">,</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">loops</span> <span class="o">=</span> <span class="n">rexp</span><span class="p">.</span><span class="n">mods</span> <span class="o">&amp;</span> <span class="n">MOD_ALPHA</span> <span class="o">?</span> <span class="mi">1</span> <span class="o">:</span> <span class="n">text</span><span class="p">.</span><span class="n">len</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">loops</span><span class="p">;</span> <span class="n">i</span> <span class="o">+=</span> <span class="n">forward</span> <span class="p">){</span>
+    <span class="n">forward</span>    <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="n">text</span><span class="p">.</span><span class="n">pos</span>   <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="n">text</span><span class="p">.</span><span class="n">ptr</span>   <span class="o">=</span> <span class="n">txt</span>    <span class="o">+</span> <span class="n">i</span><span class="p">;</span>
+    <span class="n">text</span><span class="p">.</span><span class="n">len</span>   <span class="o">=</span> <span class="n">txtLen</span> <span class="o">-</span> <span class="n">i</span><span class="p">;</span>
+
+    <span class="k">if</span><span class="p">(</span> <span class="n">walker</span><span class="p">(</span> <span class="n">rexp</span> <span class="p">)</span> <span class="p">){</span>
+      <span class="k">if</span>     <span class="p">(</span>  <span class="n">rexp</span><span class="p">.</span><span class="n">mods</span> <span class="o">&amp;</span> <span class="n">MOD_OMEGA</span>    <span class="p">){</span> <span class="k">if</span><span class="p">(</span> <span class="n">text</span><span class="p">.</span><span class="n">pos</span> <span class="o">==</span> <span class="n">text</span><span class="p">.</span><span class="n">len</span> <span class="p">)</span> <span class="k">return</span> <span class="n">TRUE</span><span class="p">;</span> <span class="p">}</span>
+      <span class="k">else</span> <span class="k">if</span><span class="p">(</span>  <span class="n">rexp</span><span class="p">.</span><span class="n">mods</span> <span class="o">&amp;</span> <span class="n">MOD_LONLEY</span>   <span class="p">)</span>                             <span class="k">return</span> <span class="n">TRUE</span><span class="p">;</span>
+      <span class="k">else</span> <span class="k">if</span><span class="p">(</span> <span class="p">(</span><span class="n">rexp</span><span class="p">.</span><span class="n">mods</span> <span class="o">&amp;</span> <span class="n">MOD_FwrByChar</span><span class="p">)</span> <span class="o">||</span> <span class="n">text</span><span class="p">.</span><span class="n">pos</span> <span class="o">==</span> <span class="mi">0</span> <span class="p">)</span>          <span class="n">result</span><span class="o">++</span><span class="p">;</span>
+      <span class="k">else</span>   <span class="p">{</span>  <span class="n">forward</span> <span class="o">=</span> <span class="n">text</span><span class="p">.</span><span class="n">pos</span><span class="p">;</span>                                    <span class="n">result</span><span class="o">++</span><span class="p">;</span> <span class="p">}</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="k">return</span> <span class="n">result</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">static</span> <span class="kt">int</span> <span class="nf">walker</span><span class="p">(</span> <span class="k">struct</span> <span class="n">RE</span> <span class="n">rexp</span> <span class="p">){</span>
+  <span class="k">struct</span> <span class="n">RE</span> <span class="n">track</span><span class="p">;</span>
+  <span class="k">for</span><span class="p">(</span> <span class="k">const</span> <span class="kt">int</span> <span class="n">oPos</span> <span class="o">=</span> <span class="n">text</span><span class="p">.</span><span class="n">pos</span><span class="p">;</span> <span class="n">trackByType</span><span class="p">(</span> <span class="o">&amp;</span><span class="n">rexp</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">track</span><span class="p">,</span> <span class="n">PATH</span> <span class="p">);</span> <span class="n">text</span><span class="p">.</span><span class="n">pos</span> <span class="o">=</span> <span class="n">oPos</span> <span class="p">)</span>
+    <span class="k">if</span><span class="p">(</span> <span class="n">trekking</span><span class="p">(</span> <span class="o">&amp;</span><span class="n">track</span> <span class="p">)</span> <span class="p">)</span> <span class="k">return</span> <span class="n">TRUE</span><span class="p">;</span>
+
+  <span class="k">return</span> <span class="n">FALSE</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">static</span> <span class="kt">int</span> <span class="nf">trekking</span><span class="p">(</span> <span class="k">struct</span> <span class="n">RE</span> <span class="o">*</span><span class="n">rexp</span> <span class="p">){</span>
+  <span class="k">struct</span> <span class="n">RE</span> <span class="n">track</span><span class="p">;</span>
+  <span class="k">while</span><span class="p">(</span> <span class="n">tracker</span><span class="p">(</span> <span class="n">rexp</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">track</span> <span class="p">)</span> <span class="p">)</span>
+    <span class="k">if</span><span class="p">(</span> <span class="n">looper</span><span class="p">(</span> <span class="o">&amp;</span><span class="n">track</span> <span class="p">)</span> <span class="o">==</span> <span class="n">FALSE</span> <span class="p">)</span> <span class="k">return</span> <span class="n">FALSE</span><span class="p">;</span>
+
+  <span class="k">return</span> <span class="n">TRUE</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">static</span> <span class="kt">int</span> <span class="nf">looper</span><span class="p">(</span> <span class="k">struct</span> <span class="n">RE</span> <span class="o">*</span><span class="n">rexp</span> <span class="p">){</span>
+  <span class="kt">int</span> <span class="n">forward</span><span class="p">,</span> <span class="n">loops</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+
+  <span class="k">switch</span><span class="p">(</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">type</span> <span class="p">){</span>
+  <span class="k">case</span> <span class="nl">HOOK</span><span class="p">:</span> <span class="k">case</span> <span class="nl">GROUP</span><span class="p">:</span> <span class="k">case</span> <span class="nl">PATH</span><span class="p">:</span>
+    <span class="k">while</span><span class="p">(</span> <span class="n">loops</span> <span class="o">&lt;</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">loopsMax</span> <span class="o">&amp;&amp;</span> <span class="n">walker</span><span class="p">(</span> <span class="o">*</span><span class="n">rexp</span> <span class="p">)</span> <span class="p">)</span>
+      <span class="n">loops</span><span class="o">++</span><span class="p">;</span>
+    <span class="k">break</span><span class="p">;</span>
+  <span class="k">case</span> <span class="nl">SET</span><span class="p">:</span> <span class="k">case</span> <span class="nl">BACKREF</span><span class="p">:</span> <span class="k">case</span> <span class="nl">META</span><span class="p">:</span> <span class="k">case</span> <span class="nl">RANGEAB</span><span class="p">:</span> <span class="k">case</span> <span class="nl">POINT</span><span class="p">:</span> <span class="k">case</span> <span class="nl">SIMPLE</span><span class="p">:</span>
+    <span class="k">while</span><span class="p">(</span> <span class="n">loops</span> <span class="o">&lt;</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">loopsMax</span> <span class="o">&amp;&amp;</span> <span class="n">text</span><span class="p">.</span><span class="n">pos</span> <span class="o">&lt;</span> <span class="n">text</span><span class="p">.</span><span class="n">len</span> <span class="o">&amp;&amp;</span> <span class="p">(</span><span class="n">forward</span> <span class="o">=</span> <span class="n">match</span><span class="p">(</span> <span class="n">rexp</span> <span class="p">))</span> <span class="p">){</span>
+      <span class="n">text</span><span class="p">.</span><span class="n">pos</span> <span class="o">+=</span> <span class="n">forward</span><span class="p">;</span>
+      <span class="n">loops</span><span class="o">++</span><span class="p">;</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="k">return</span> <span class="n">loops</span> <span class="o">&lt;</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">loopsMin</span> <span class="o">?</span> <span class="nl">FALSE</span> <span class="p">:</span> <span class="n">TRUE</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">static</span> <span class="kt">int</span> <span class="nf">trackByType</span><span class="p">(</span> <span class="k">struct</span> <span class="n">RE</span> <span class="o">*</span><span class="n">rexp</span><span class="p">,</span> <span class="k">struct</span> <span class="n">RE</span> <span class="o">*</span><span class="n">track</span><span class="p">,</span> <span class="kt">int</span> <span class="n">type</span> <span class="p">){</span>
+  <span class="k">if</span><span class="p">(</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">len</span> <span class="o">==</span> <span class="mi">0</span> <span class="p">)</span> <span class="k">return</span> <span class="n">FALSE</span><span class="p">;</span>
+
+  <span class="o">*</span><span class="n">track</span> <span class="o">=</span> <span class="o">*</span><span class="n">rexp</span><span class="p">;</span>
+  <span class="n">track</span><span class="o">-&gt;</span><span class="n">type</span> <span class="o">=</span> <span class="n">type</span><span class="p">;</span>
+
+  <span class="k">for</span><span class="p">(</span> <span class="kt">int</span> <span class="n">cut</span><span class="p">,</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">deep</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="p">(</span><span class="n">i</span> <span class="o">+=</span> <span class="n">walkMeta</span><span class="p">(</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">ptr</span> <span class="o">+</span> <span class="n">i</span> <span class="p">))</span> <span class="o">&lt;</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">len</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span> <span class="p">){</span>
+    <span class="k">switch</span><span class="p">(</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">[</span> <span class="n">i</span> <span class="p">]</span> <span class="p">){</span>
+    <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;(&#39;</span><span class="o">:</span> <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;&lt;&#39;</span><span class="o">:</span> <span class="n">deep</span><span class="o">++</span><span class="p">;</span> <span class="k">break</span><span class="p">;</span>
+    <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;)&#39;</span><span class="o">:</span> <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;&gt;&#39;</span><span class="o">:</span> <span class="n">deep</span><span class="o">--</span><span class="p">;</span> <span class="k">break</span><span class="p">;</span>
+    <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;[&#39;</span><span class="o">:</span> <span class="n">i</span> <span class="o">+=</span> <span class="n">walkSet</span><span class="p">(</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">ptr</span> <span class="o">+</span> <span class="n">i</span><span class="p">,</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">len</span> <span class="o">-</span> <span class="n">i</span> <span class="p">);</span> <span class="k">break</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="k">switch</span><span class="p">(</span> <span class="n">type</span> <span class="p">){</span>
+    <span class="k">case</span> <span class="nl">HOOK</span>    <span class="p">:</span> <span class="n">cut</span> <span class="o">=</span> <span class="n">deep</span> <span class="o">==</span> <span class="mi">0</span><span class="p">;</span> <span class="k">break</span><span class="p">;</span>
+    <span class="k">case</span> <span class="nl">GROUP</span>   <span class="p">:</span> <span class="n">cut</span> <span class="o">=</span> <span class="n">deep</span> <span class="o">==</span> <span class="mi">0</span><span class="p">;</span> <span class="k">break</span><span class="p">;</span>
+    <span class="k">case</span> <span class="nl">SET</span>     <span class="p">:</span> <span class="n">cut</span> <span class="o">=</span>              <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">==</span> <span class="sa"></span><span class="sc">&#39;]&#39;</span><span class="p">;</span> <span class="k">break</span><span class="p">;</span>
+    <span class="k">case</span> <span class="nl">PATH</span>    <span class="p">:</span> <span class="n">cut</span> <span class="o">=</span> <span class="n">deep</span> <span class="o">==</span> <span class="mi">0</span> <span class="o">&amp;&amp;</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">==</span> <span class="sa"></span><span class="sc">&#39;|&#39;</span><span class="p">;</span> <span class="k">break</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="k">if</span><span class="p">(</span> <span class="n">cut</span> <span class="p">){</span>
+      <span class="n">track</span><span class="o">-&gt;</span><span class="n">len</span>  <span class="o">=</span> <span class="n">i</span><span class="p">;</span>
+      <span class="n">fwrRexp</span><span class="p">(</span> <span class="n">rexp</span><span class="p">,</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span> <span class="p">);</span>
+      <span class="k">if</span><span class="p">(</span> <span class="n">type</span> <span class="o">!=</span> <span class="n">PATH</span> <span class="p">)</span> <span class="n">fwrRexp</span><span class="p">(</span> <span class="n">track</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+      <span class="k">return</span> <span class="n">TRUE</span><span class="p">;</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="n">fwrRexp</span><span class="p">(</span> <span class="n">rexp</span><span class="p">,</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">len</span> <span class="p">);</span>
+  <span class="k">return</span> <span class="n">TRUE</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">static</span> <span class="kt">int</span> <span class="nf">tracker</span><span class="p">(</span> <span class="k">struct</span> <span class="n">RE</span> <span class="o">*</span><span class="n">rexp</span><span class="p">,</span> <span class="k">struct</span> <span class="n">RE</span> <span class="o">*</span><span class="n">track</span> <span class="p">){</span>
+  <span class="k">if</span><span class="p">(</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">len</span> <span class="o">==</span> <span class="mi">0</span> <span class="p">)</span> <span class="k">return</span> <span class="n">FALSE</span><span class="p">;</span>
+
+  <span class="k">switch</span><span class="p">(</span> <span class="o">*</span><span class="n">rexp</span><span class="o">-&gt;</span><span class="n">ptr</span> <span class="p">){</span>
+  <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;:&#39;</span><span class="o">:</span> <span class="n">trackByLen</span> <span class="p">(</span> <span class="n">rexp</span><span class="p">,</span> <span class="n">track</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">META</span>  <span class="p">);</span> <span class="k">break</span><span class="p">;</span>
+  <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;.&#39;</span><span class="o">:</span> <span class="n">trackByLen</span> <span class="p">(</span> <span class="n">rexp</span><span class="p">,</span> <span class="n">track</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">POINT</span> <span class="p">);</span> <span class="k">break</span><span class="p">;</span>
+  <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;(&#39;</span><span class="o">:</span> <span class="n">trackByType</span><span class="p">(</span> <span class="n">rexp</span><span class="p">,</span> <span class="n">track</span><span class="p">,</span>    <span class="n">GROUP</span> <span class="p">);</span> <span class="k">break</span><span class="p">;</span>
+  <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;&lt;&#39;</span><span class="o">:</span> <span class="n">trackByType</span><span class="p">(</span> <span class="n">rexp</span><span class="p">,</span> <span class="n">track</span><span class="p">,</span>    <span class="n">HOOK</span>  <span class="p">);</span> <span class="k">break</span><span class="p">;</span>
+  <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;[&#39;</span><span class="o">:</span> <span class="n">trackByType</span><span class="p">(</span> <span class="n">rexp</span><span class="p">,</span> <span class="n">track</span><span class="p">,</span>    <span class="n">SET</span>   <span class="p">);</span> <span class="k">break</span><span class="p">;</span>
+  <span class="k">default</span> <span class="o">:</span>
+    <span class="k">for</span><span class="p">(</span> <span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">len</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span> <span class="p">)</span>
+      <span class="k">switch</span><span class="p">(</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">[</span> <span class="n">i</span> <span class="p">]</span> <span class="p">){</span>
+      <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;(&#39;</span><span class="o">:</span> <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;&lt;&#39;</span><span class="o">:</span> <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;[&#39;</span><span class="o">:</span> <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;:&#39;</span><span class="o">:</span> <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;.&#39;</span><span class="o">:</span>
+        <span class="n">trackByLen</span><span class="p">(</span> <span class="n">rexp</span><span class="p">,</span> <span class="n">track</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="n">SIMPLE</span>  <span class="p">);</span> <span class="k">goto</span> <span class="n">getLM</span><span class="p">;</span>
+      <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;?&#39;</span><span class="o">:</span> <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;+&#39;</span><span class="o">:</span> <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;*&#39;</span><span class="o">:</span> <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;{&#39;</span><span class="o">:</span> <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;-&#39;</span><span class="o">:</span> <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;#&#39;</span><span class="o">:</span>
+        <span class="k">if</span><span class="p">(</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">1</span> <span class="p">){</span>
+          <span class="k">if</span><span class="p">(</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">==</span> <span class="sa"></span><span class="sc">&#39;-&#39;</span> <span class="p">)</span> <span class="n">trackByLen</span><span class="p">(</span> <span class="n">rexp</span><span class="p">,</span> <span class="n">track</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">RANGEAB</span> <span class="p">);</span>
+          <span class="k">else</span>                      <span class="n">trackByLen</span><span class="p">(</span> <span class="n">rexp</span><span class="p">,</span> <span class="n">track</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">SIMPLE</span>  <span class="p">);</span>
+        <span class="p">}</span> <span class="k">else</span>                      <span class="n">trackByLen</span><span class="p">(</span> <span class="n">rexp</span><span class="p">,</span> <span class="n">track</span><span class="p">,</span> <span class="n">i</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">SIMPLE</span>  <span class="p">);</span>
+        <span class="k">goto</span> <span class="n">getLM</span><span class="p">;</span>
+      <span class="p">}</span>
+
+    <span class="n">trackByLen</span><span class="p">(</span> <span class="n">rexp</span><span class="p">,</span> <span class="n">track</span><span class="p">,</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">len</span><span class="p">,</span> <span class="n">SIMPLE</span>  <span class="p">);</span>
+  <span class="p">}</span>
+
+ <span class="nl">getLM</span><span class="p">:</span>
+  <span class="n">getLoops</span><span class="p">(</span> <span class="n">rexp</span><span class="p">,</span> <span class="n">track</span> <span class="p">);</span>
+  <span class="n">getMods</span> <span class="p">(</span> <span class="n">rexp</span><span class="p">,</span> <span class="n">track</span> <span class="p">);</span>
+  <span class="k">return</span> <span class="n">TRUE</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">static</span> <span class="kt">void</span> <span class="nf">trackByLen</span><span class="p">(</span> <span class="k">struct</span> <span class="n">RE</span> <span class="o">*</span><span class="n">rexp</span><span class="p">,</span> <span class="k">struct</span> <span class="n">RE</span> <span class="o">*</span><span class="n">track</span><span class="p">,</span> <span class="kt">int</span> <span class="n">len</span><span class="p">,</span> <span class="kt">int</span> <span class="n">type</span> <span class="p">){</span>
+  <span class="o">*</span><span class="n">track</span>       <span class="o">=</span> <span class="o">*</span><span class="n">rexp</span><span class="p">;</span>
+  <span class="n">track</span><span class="o">-&gt;</span><span class="n">type</span>  <span class="o">=</span> <span class="n">type</span><span class="p">;</span>
+  <span class="n">track</span><span class="o">-&gt;</span><span class="n">len</span>   <span class="o">=</span> <span class="n">len</span><span class="p">;</span>
+  <span class="n">fwrRexp</span><span class="p">(</span> <span class="n">rexp</span><span class="p">,</span> <span class="n">len</span> <span class="p">);</span>
+<span class="p">}</span>
+
+<span class="k">static</span> <span class="kt">void</span> <span class="nf">fwrRexp</span><span class="p">(</span> <span class="k">struct</span> <span class="n">RE</span> <span class="o">*</span><span class="n">rexp</span><span class="p">,</span> <span class="kt">int</span> <span class="n">len</span> <span class="p">){</span>
+  <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">ptr</span> <span class="o">+=</span> <span class="n">len</span><span class="p">;</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">len</span> <span class="o">-=</span> <span class="n">len</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">static</span> <span class="kt">int</span> <span class="nf">walkSet</span><span class="p">(</span> <span class="kt">char</span> <span class="o">*</span><span class="n">str</span><span class="p">,</span> <span class="kt">int</span> <span class="n">len</span> <span class="p">){</span>
+  <span class="k">for</span><span class="p">(</span> <span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="p">(</span><span class="n">i</span> <span class="o">+=</span> <span class="n">walkMeta</span><span class="p">(</span> <span class="n">str</span> <span class="o">+</span> <span class="n">i</span> <span class="p">))</span> <span class="o">&lt;</span> <span class="n">len</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span> <span class="p">)</span>
+    <span class="k">if</span><span class="p">(</span> <span class="n">str</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">==</span> <span class="sa"></span><span class="sc">&#39;]&#39;</span> <span class="p">)</span> <span class="k">return</span> <span class="n">i</span><span class="p">;</span>
+
+  <span class="k">return</span> <span class="n">len</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">static</span> <span class="kt">int</span> <span class="nf">walkMeta</span><span class="p">(</span> <span class="kt">char</span> <span class="o">*</span><span class="n">str</span> <span class="p">){</span>
+  <span class="k">for</span><span class="p">(</span> <span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="p">;</span> <span class="n">i</span> <span class="o">+=</span> <span class="mi">2</span> <span class="p">)</span>
+    <span class="k">if</span><span class="p">(</span> <span class="n">str</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">!=</span> <span class="sa"></span><span class="sc">&#39;:&#39;</span> <span class="p">)</span> <span class="k">return</span> <span class="n">i</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">static</span> <span class="kt">void</span> <span class="nf">getMods</span><span class="p">(</span> <span class="k">struct</span> <span class="n">RE</span> <span class="o">*</span><span class="n">rexp</span><span class="p">,</span> <span class="k">struct</span> <span class="n">RE</span> <span class="o">*</span><span class="n">track</span> <span class="p">){</span>
+  <span class="kt">int</span> <span class="n">inMods</span> <span class="o">=</span> <span class="o">*</span><span class="n">rexp</span><span class="o">-&gt;</span><span class="n">ptr</span> <span class="o">==</span> <span class="sa"></span><span class="sc">&#39;#&#39;</span><span class="p">,</span> <span class="n">pos</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+
+  <span class="k">while</span><span class="p">(</span> <span class="n">inMods</span> <span class="p">)</span>
+    <span class="k">switch</span><span class="p">(</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">[</span> <span class="o">++</span><span class="n">pos</span> <span class="p">]</span> <span class="p">){</span>
+    <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;^&#39;</span><span class="o">:</span> <span class="n">track</span><span class="o">-&gt;</span><span class="n">mods</span> <span class="o">|=</span>  <span class="n">MOD_ALPHA</span>     <span class="p">;</span> <span class="k">break</span><span class="p">;</span>
+    <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;$&#39;</span><span class="o">:</span> <span class="n">track</span><span class="o">-&gt;</span><span class="n">mods</span> <span class="o">|=</span>  <span class="n">MOD_OMEGA</span>     <span class="p">;</span> <span class="k">break</span><span class="p">;</span>
+    <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;?&#39;</span><span class="o">:</span> <span class="n">track</span><span class="o">-&gt;</span><span class="n">mods</span> <span class="o">|=</span>  <span class="n">MOD_LONLEY</span>    <span class="p">;</span> <span class="k">break</span><span class="p">;</span>
+    <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;~&#39;</span><span class="o">:</span> <span class="n">track</span><span class="o">-&gt;</span><span class="n">mods</span> <span class="o">|=</span>  <span class="n">MOD_FwrByChar</span> <span class="p">;</span> <span class="k">break</span><span class="p">;</span>
+    <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;*&#39;</span><span class="o">:</span> <span class="n">track</span><span class="o">-&gt;</span><span class="n">mods</span> <span class="o">|=</span>  <span class="n">MOD_COMMUNISM</span> <span class="p">;</span> <span class="k">break</span><span class="p">;</span>
+    <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;/&#39;</span><span class="o">:</span> <span class="n">track</span><span class="o">-&gt;</span><span class="n">mods</span> <span class="o">&amp;=</span> <span class="o">~</span><span class="n">MOD_COMMUNISM</span> <span class="p">;</span> <span class="k">break</span><span class="p">;</span>
+    <span class="k">default</span> <span class="o">:</span> <span class="n">inMods</span>       <span class="o">=</span>  <span class="n">FALSE</span>         <span class="p">;</span> <span class="k">break</span><span class="p">;</span>
+    <span class="p">}</span>
+
+  <span class="n">fwrRexp</span><span class="p">(</span> <span class="n">rexp</span><span class="p">,</span> <span class="n">pos</span> <span class="p">);</span>
+<span class="p">}</span>
+
+<span class="k">static</span> <span class="kt">void</span> <span class="nf">getLoops</span><span class="p">(</span> <span class="k">struct</span> <span class="n">RE</span> <span class="o">*</span><span class="n">rexp</span><span class="p">,</span> <span class="k">struct</span> <span class="n">RE</span> <span class="o">*</span><span class="n">track</span> <span class="p">){</span>
+  <span class="n">track</span><span class="o">-&gt;</span><span class="n">loopsMin</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span> <span class="n">track</span><span class="o">-&gt;</span><span class="n">loopsMax</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+
+  <span class="k">if</span><span class="p">(</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">len</span> <span class="p">)</span>
+    <span class="k">switch</span><span class="p">(</span> <span class="o">*</span><span class="n">rexp</span><span class="o">-&gt;</span><span class="n">ptr</span> <span class="p">){</span>
+    <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;?&#39;</span> <span class="o">:</span> <span class="n">track</span><span class="o">-&gt;</span><span class="n">loopsMin</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">track</span><span class="o">-&gt;</span><span class="n">loopsMax</span> <span class="o">=</span>   <span class="mi">1</span><span class="p">;</span> <span class="n">fwrRexp</span><span class="p">(</span> <span class="n">rexp</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span> <span class="k">return</span><span class="p">;</span>
+    <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;+&#39;</span> <span class="o">:</span> <span class="n">track</span><span class="o">-&gt;</span><span class="n">loopsMin</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span> <span class="n">track</span><span class="o">-&gt;</span><span class="n">loopsMax</span> <span class="o">=</span> <span class="n">INF</span><span class="p">;</span> <span class="n">fwrRexp</span><span class="p">(</span> <span class="n">rexp</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span> <span class="k">return</span><span class="p">;</span>
+    <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;*&#39;</span> <span class="o">:</span> <span class="n">track</span><span class="o">-&gt;</span><span class="n">loopsMin</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">track</span><span class="o">-&gt;</span><span class="n">loopsMax</span> <span class="o">=</span> <span class="n">INF</span><span class="p">;</span> <span class="n">fwrRexp</span><span class="p">(</span> <span class="n">rexp</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span> <span class="k">return</span><span class="p">;</span>
+    <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;{&#39;</span> <span class="o">:</span> <span class="n">fwrRexp</span><span class="p">(</span> <span class="n">rexp</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+      <span class="n">track</span><span class="o">-&gt;</span><span class="n">loopsMin</span> <span class="o">=</span> <span class="n">atoi</span><span class="p">(</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">ptr</span> <span class="p">);</span>
+      <span class="n">fwrRexp</span><span class="p">(</span> <span class="n">rexp</span><span class="p">,</span> <span class="n">countCharDigits</span><span class="p">(</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">ptr</span> <span class="p">)</span> <span class="p">);</span>
+      <span class="k">if</span><span class="p">(</span> <span class="o">*</span><span class="n">rexp</span><span class="o">-&gt;</span><span class="n">ptr</span> <span class="o">==</span> <span class="sa"></span><span class="sc">&#39;,&#39;</span> <span class="p">){</span>
+        <span class="n">fwrRexp</span><span class="p">(</span> <span class="n">rexp</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+        <span class="k">if</span><span class="p">(</span> <span class="o">*</span><span class="n">rexp</span><span class="o">-&gt;</span><span class="n">ptr</span> <span class="o">==</span> <span class="sa"></span><span class="sc">&#39;}&#39;</span> <span class="p">)</span>
+          <span class="n">track</span><span class="o">-&gt;</span><span class="n">loopsMax</span> <span class="o">=</span> <span class="n">INF</span><span class="p">;</span>
+        <span class="k">else</span> <span class="p">{</span>
+          <span class="n">track</span><span class="o">-&gt;</span><span class="n">loopsMax</span> <span class="o">=</span> <span class="n">atoi</span><span class="p">(</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">ptr</span> <span class="p">);</span>
+          <span class="n">fwrRexp</span><span class="p">(</span> <span class="n">rexp</span><span class="p">,</span> <span class="n">countCharDigits</span><span class="p">(</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">ptr</span>  <span class="p">)</span> <span class="p">);</span>
+        <span class="p">}</span>
+      <span class="p">}</span> <span class="k">else</span> <span class="n">track</span><span class="o">-&gt;</span><span class="n">loopsMax</span> <span class="o">=</span> <span class="n">track</span><span class="o">-&gt;</span><span class="n">loopsMin</span><span class="p">;</span>
+
+      <span class="n">fwrRexp</span><span class="p">(</span> <span class="n">rexp</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">static</span> <span class="kt">int</span> <span class="nf">countCharDigits</span><span class="p">(</span> <span class="kt">char</span> <span class="o">*</span><span class="n">str</span> <span class="p">){</span>
+  <span class="k">for</span><span class="p">(</span> <span class="kt">int</span> <span class="n">digits</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="p">;</span> <span class="n">digits</span><span class="o">++</span> <span class="p">)</span>
+    <span class="k">if</span><span class="p">(</span> <span class="n">isdigit</span><span class="p">(</span> <span class="o">*</span><span class="n">str</span><span class="o">++</span> <span class="p">)</span> <span class="o">==</span> <span class="mi">0</span> <span class="p">)</span> <span class="k">return</span> <span class="n">digits</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">static</span> <span class="kt">int</span> <span class="nf">match</span><span class="p">(</span> <span class="k">struct</span> <span class="n">RE</span> <span class="o">*</span><span class="n">rexp</span> <span class="p">){</span>
+  <span class="k">switch</span><span class="p">(</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">type</span> <span class="p">){</span>
+  <span class="k">case</span> <span class="nl">POINT</span>  <span class="p">:</span> <span class="k">return</span> <span class="n">text</span><span class="p">.</span><span class="n">pos</span> <span class="o">&lt;</span> <span class="n">text</span><span class="p">.</span><span class="n">len</span><span class="p">;</span>
+  <span class="k">case</span> <span class="nl">SET</span>    <span class="p">:</span> <span class="k">return</span> <span class="n">matchSet</span>  <span class="p">(</span> <span class="o">*</span><span class="n">rexp</span> <span class="p">);</span>
+  <span class="k">case</span> <span class="nl">RANGEAB</span><span class="p">:</span> <span class="k">return</span> <span class="n">matchRange</span><span class="p">(</span> <span class="n">rexp</span><span class="p">,</span> <span class="n">text</span><span class="p">.</span><span class="n">ptr</span><span class="p">[</span><span class="n">text</span><span class="p">.</span><span class="n">pos</span><span class="p">]</span>  <span class="p">);</span>
+  <span class="k">case</span> <span class="nl">META</span>   <span class="p">:</span> <span class="k">return</span> <span class="n">matchMeta</span> <span class="p">(</span> <span class="n">rexp</span><span class="p">,</span> <span class="n">text</span><span class="p">.</span><span class="n">ptr</span><span class="p">[</span><span class="n">text</span><span class="p">.</span><span class="n">pos</span><span class="p">]</span>  <span class="p">);</span>
+  <span class="k">default</span>     <span class="o">:</span> <span class="k">return</span> <span class="n">matchText</span> <span class="p">(</span> <span class="n">rexp</span><span class="p">,</span> <span class="n">text</span><span class="p">.</span><span class="n">ptr</span> <span class="o">+</span> <span class="n">text</span><span class="p">.</span><span class="n">pos</span> <span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">static</span> <span class="kt">char</span> <span class="o">*</span> <span class="nf">strnChr</span><span class="p">(</span> <span class="kt">char</span> <span class="o">*</span><span class="n">str</span><span class="p">,</span> <span class="kt">int</span> <span class="n">chr</span><span class="p">,</span> <span class="kt">int</span> <span class="n">n</span> <span class="p">){</span>
+  <span class="k">for</span><span class="p">(</span> <span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">n</span> <span class="o">&amp;&amp;</span> <span class="n">str</span><span class="p">[</span> <span class="n">i</span> <span class="p">];</span> <span class="n">i</span><span class="o">++</span> <span class="p">)</span>
+    <span class="k">if</span><span class="p">(</span> <span class="n">str</span><span class="p">[</span> <span class="n">i</span> <span class="p">]</span> <span class="o">==</span> <span class="n">chr</span> <span class="p">)</span> <span class="k">return</span> <span class="n">str</span> <span class="o">+</span> <span class="n">i</span><span class="p">;</span>
+
+  <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">static</span> <span class="kt">int</span> <span class="nf">cmpChrCommunist</span><span class="p">(</span> <span class="kt">char</span> <span class="n">a</span><span class="p">,</span> <span class="kt">char</span> <span class="n">b</span><span class="p">){</span>
+  <span class="n">a</span> <span class="o">=</span> <span class="n">tolower</span><span class="p">(</span><span class="n">a</span><span class="p">);</span>
+  <span class="n">b</span> <span class="o">=</span> <span class="n">tolower</span><span class="p">(</span><span class="n">b</span><span class="p">);</span>
+  <span class="k">return</span> <span class="n">a</span> <span class="o">==</span> <span class="n">b</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">static</span> <span class="kt">char</span> <span class="o">*</span> <span class="nf">strnChrCommunist</span><span class="p">(</span> <span class="kt">char</span> <span class="o">*</span><span class="n">str</span><span class="p">,</span> <span class="kt">int</span> <span class="n">chr</span><span class="p">,</span> <span class="kt">int</span> <span class="n">n</span> <span class="p">){</span>
+  <span class="k">for</span><span class="p">(</span> <span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">n</span> <span class="o">&amp;&amp;</span> <span class="n">str</span><span class="p">[</span> <span class="n">i</span> <span class="p">];</span> <span class="n">i</span><span class="o">++</span> <span class="p">)</span>
+    <span class="k">if</span><span class="p">(</span> <span class="n">cmpChrCommunist</span><span class="p">(</span> <span class="n">str</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">chr</span> <span class="p">)</span> <span class="p">)</span> <span class="k">return</span> <span class="n">str</span> <span class="o">+</span> <span class="n">i</span><span class="p">;</span>
+
+  <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">static</span> <span class="kt">int</span> <span class="nf">strnCmpCommunist</span><span class="p">(</span> <span class="kt">char</span> <span class="o">*</span><span class="n">s</span><span class="p">,</span> <span class="kt">char</span> <span class="o">*</span><span class="n">t</span><span class="p">,</span> <span class="kt">int</span> <span class="n">n</span> <span class="p">){</span>
+  <span class="k">for</span><span class="p">(</span> <span class="p">;</span> <span class="n">cmpChrCommunist</span><span class="p">(</span> <span class="o">*</span><span class="n">s</span><span class="p">,</span> <span class="o">*</span><span class="n">t</span> <span class="p">);</span> <span class="n">s</span><span class="o">++</span><span class="p">,</span> <span class="n">t</span><span class="o">++</span> <span class="p">)</span>
+    <span class="k">if</span><span class="p">(</span> <span class="o">*</span><span class="n">s</span> <span class="o">==</span> <span class="sa"></span><span class="sc">&#39;\0&#39;</span> <span class="o">||</span> <span class="o">--</span><span class="n">n</span> <span class="o">&lt;=</span> <span class="mi">0</span> <span class="p">)</span> <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+
+  <span class="k">return</span> <span class="o">*</span><span class="n">s</span> <span class="o">-</span> <span class="o">*</span><span class="n">t</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">static</span> <span class="kt">int</span> <span class="nf">matchText</span><span class="p">(</span> <span class="k">struct</span> <span class="n">RE</span> <span class="o">*</span><span class="n">rexp</span><span class="p">,</span> <span class="kt">char</span> <span class="o">*</span><span class="n">txt</span> <span class="p">){</span>
+  <span class="k">if</span><span class="p">(</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">mods</span> <span class="o">&amp;</span> <span class="n">MOD_COMMUNISM</span> <span class="p">)</span>
+    <span class="k">return</span>    <span class="n">strnCmpCommunist</span><span class="p">(</span> <span class="n">txt</span><span class="p">,</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">,</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">len</span> <span class="p">)</span>  <span class="o">==</span> <span class="mi">0</span> <span class="o">?</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="nl">len</span> <span class="p">:</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="k">else</span> <span class="k">return</span> <span class="n">strncmp</span>         <span class="p">(</span> <span class="n">txt</span><span class="p">,</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">,</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">len</span> <span class="p">)</span>  <span class="o">==</span> <span class="mi">0</span> <span class="o">?</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="nl">len</span> <span class="p">:</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">static</span> <span class="kt">int</span> <span class="nf">matchRange</span><span class="p">(</span> <span class="k">struct</span> <span class="n">RE</span> <span class="o">*</span><span class="n">rexp</span><span class="p">,</span> <span class="kt">int</span> <span class="n">chr</span> <span class="p">){</span>
+  <span class="k">if</span><span class="p">(</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">mods</span> <span class="o">&amp;</span> <span class="n">MOD_COMMUNISM</span> <span class="p">){</span>
+    <span class="n">chr</span> <span class="o">=</span> <span class="n">tolower</span><span class="p">(</span> <span class="n">chr</span> <span class="p">);</span>
+    <span class="k">return</span> <span class="n">chr</span> <span class="o">&gt;=</span> <span class="n">tolower</span><span class="p">(</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">[</span> <span class="mi">0</span> <span class="p">]</span> <span class="p">)</span> <span class="o">&amp;&amp;</span> <span class="n">chr</span> <span class="o">&lt;=</span> <span class="n">tolower</span><span class="p">(</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">[</span> <span class="mi">2</span> <span class="p">]</span> <span class="p">);</span>
+  <span class="p">}</span> <span class="k">else</span>
+    <span class="k">return</span> <span class="n">chr</span> <span class="o">&gt;=</span>          <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">[</span> <span class="mi">0</span> <span class="p">]</span>   <span class="o">&amp;&amp;</span> <span class="n">chr</span> <span class="o">&lt;=</span>          <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">[</span> <span class="mi">2</span> <span class="p">];</span>
+<span class="p">}</span>
+
+<span class="k">static</span> <span class="kt">int</span> <span class="nf">matchMeta</span><span class="p">(</span> <span class="k">struct</span> <span class="n">RE</span> <span class="o">*</span><span class="n">rexp</span><span class="p">,</span> <span class="kt">int</span> <span class="n">chr</span> <span class="p">){</span>
+  <span class="k">switch</span><span class="p">(</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="p">){</span>
+  <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;a&#39;</span> <span class="o">:</span> <span class="k">return</span> <span class="n">isalpha</span><span class="p">(</span> <span class="n">chr</span> <span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;A&#39;</span> <span class="o">:</span> <span class="k">return</span> <span class="n">isalpha</span><span class="p">(</span> <span class="n">chr</span> <span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;d&#39;</span> <span class="o">:</span> <span class="k">return</span> <span class="n">isdigit</span><span class="p">(</span> <span class="n">chr</span> <span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;D&#39;</span> <span class="o">:</span> <span class="k">return</span> <span class="n">isdigit</span><span class="p">(</span> <span class="n">chr</span> <span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;w&#39;</span> <span class="o">:</span> <span class="k">return</span> <span class="n">isalnum</span><span class="p">(</span> <span class="n">chr</span> <span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;W&#39;</span> <span class="o">:</span> <span class="k">return</span> <span class="n">isalnum</span><span class="p">(</span> <span class="n">chr</span> <span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;s&#39;</span> <span class="o">:</span> <span class="k">return</span> <span class="n">isspace</span><span class="p">(</span> <span class="n">chr</span> <span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;S&#39;</span> <span class="o">:</span> <span class="k">return</span> <span class="n">isspace</span><span class="p">(</span> <span class="n">chr</span> <span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="k">default</span>  <span class="o">:</span> <span class="k">return</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="n">chr</span><span class="p">;</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">static</span> <span class="kt">int</span> <span class="nf">matchSet</span><span class="p">(</span> <span class="k">struct</span> <span class="n">RE</span> <span class="n">rexp</span> <span class="p">){</span>
+  <span class="k">struct</span> <span class="n">RE</span> <span class="n">track</span><span class="p">;</span>
+  <span class="kt">int</span> <span class="n">result</span>  <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">reverse</span> <span class="o">=</span> <span class="o">*</span><span class="n">rexp</span><span class="p">.</span><span class="n">ptr</span> <span class="o">==</span> <span class="sa"></span><span class="sc">&#39;^&#39;</span><span class="p">;</span>
+
+  <span class="k">if</span><span class="p">(</span> <span class="n">reverse</span> <span class="p">)</span> <span class="n">fwrRexp</span><span class="p">(</span> <span class="o">&amp;</span><span class="n">rexp</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+
+  <span class="k">while</span><span class="p">(</span> <span class="n">tracker</span><span class="p">(</span> <span class="o">&amp;</span><span class="n">rexp</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">track</span> <span class="p">)</span> <span class="p">){</span>
+    <span class="k">switch</span><span class="p">(</span> <span class="n">track</span><span class="p">.</span><span class="n">type</span> <span class="p">){</span>
+    <span class="k">case</span> <span class="nl">RANGEAB</span><span class="p">:</span> <span class="k">case</span> <span class="nl">META</span><span class="p">:</span> <span class="k">case</span> <span class="nl">POINT</span><span class="p">:</span>
+      <span class="n">result</span> <span class="o">=</span> <span class="n">match</span><span class="p">(</span> <span class="o">&amp;</span><span class="n">track</span> <span class="p">);</span> <span class="k">break</span><span class="p">;</span>
+    <span class="k">default</span><span class="o">:</span>
+      <span class="k">if</span><span class="p">(</span> <span class="n">track</span><span class="p">.</span><span class="n">mods</span> <span class="o">&amp;</span> <span class="n">MOD_COMMUNISM</span> <span class="p">)</span>
+           <span class="n">result</span> <span class="o">=</span> <span class="n">strnChrCommunist</span><span class="p">(</span> <span class="n">track</span><span class="p">.</span><span class="n">ptr</span><span class="p">,</span> <span class="n">text</span><span class="p">.</span><span class="n">ptr</span><span class="p">[</span> <span class="n">text</span><span class="p">.</span><span class="n">pos</span> <span class="p">],</span> <span class="n">track</span><span class="p">.</span><span class="n">len</span>  <span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">;</span>
+      <span class="k">else</span> <span class="n">result</span> <span class="o">=</span> <span class="n">strnChr</span>         <span class="p">(</span> <span class="n">track</span><span class="p">.</span><span class="n">ptr</span><span class="p">,</span> <span class="n">text</span><span class="p">.</span><span class="n">ptr</span><span class="p">[</span> <span class="n">text</span><span class="p">.</span><span class="n">pos</span> <span class="p">],</span> <span class="n">track</span><span class="p">.</span><span class="n">len</span>  <span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="k">if</span><span class="p">(</span> <span class="n">result</span> <span class="p">)</span> <span class="k">return</span> <span class="n">reverse</span> <span class="o">?</span> <span class="nl">FALSE</span> <span class="p">:</span> <span class="n">result</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="k">return</span> <span class="n">reverse</span> <span class="o">?</span> <span class="nl">TRUE</span> <span class="p">:</span> <span class="n">FALSE</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre>
+<p>ahora todo constructor puede contener modificadores, por tanto, se agrego una nueva varible a la estructura <code>RE</code>:</p>
+<pre class="code" ><code class="chroma" ><span class="kt">unsigned</span> <span class="kt">char</span> <span class="n">mods</span><span class="p">;</span>
+</code></pre>
+<p>Ya que en esencia un modificador no deja de ser una simple <q>bandera</q>, para economizar almacenamiento utilizaremos <code>mods</code> como una mascara de bits. Esto obliga a declarar la variable como tipo <code>unsigned</code>.</p>
+<p>Al declarar <code>mods</code> como <code>char</code> nos proporciona ocho bits, es decir, disponemos de 8 modificaciones, pero de momento solo vamos a utilizar 5.</p>
+<p>Para activar o desactivar cada bit de forma independiente, necesitamos conocer el valor que representa la posicion del bit a modificar. Esto se logra elevando 2 a la posicion del bit. Asi el primer bit es <span class="math" >2^0 = 1</span>, el segundo <span class="math" >2^1 = 2</span>, el tercero <span class="math" >2^2 = 4</span> y asi sucesivamente.</p>
+<p>Recordar la posicion de cada modificador, no es lo mas conveniete, en su lugar utilizamos constantes de preprocesador:</p>
+<pre class="code" ><code class="chroma" ><span class="cp">#define MOD_ALPHA            1
+</span><span class="cp">#define MOD_OMEGA            2
+</span><span class="cp">#define MOD_LONLEY           4
+</span><span class="cp">#define MOD_FwrByChar        8
+</span><span class="cp">#define MOD_COMMUNISM       16
+</span><span class="cp"></span></code></pre>
+<p><code>MOD_ALPHA</code>, signo <code>^</code> sera el modificador <q>busca al inicio</q>.</p>
+<p><code>MOD_OMEGA</code>, signo <code>$</code> sera el modificador <q>busca al final</q>.</p>
+<p><code>MOD_LONLEY</code>, signo <code>?</code> sera el modificador <q>detener con la primer coincidencia</q>.</p>
+<p><code>MOD_FwrByChar</code>, signo <code>~</code> sera el modificador <q>busca caracter a caracter. Si hay una coincidencia no continues al final de esta, prueba con el caracter imediatamente despues del que utilizaste para este ciclo</q>.</p>
+<p><code>MOD_COMMUNISM</code>, signo <code>*</code> sera el modificador <q>ignora entre mayusculas y minusculas.</q></p>
+<p>finalmente signo <code>/</code>, apaga el bit <code>MOD_COMMUNISM</code> para decir <q>no ignores entre mayusculas y minusculas</q>, que es el comportamiento por defecto. Tenemos 6 modificadores por el precio de 5!</p>
+<p>si los signos que he eligido no son de tu agrado, se pueden modificar sin despeinarse en la funcion <code>getMods</code>. Como su nombre indica, optiene los modificadores... y los asigna a un constructor:</p>
+<pre class="code" ><code class="chroma" ><span class="k">static</span> <span class="kt">void</span> <span class="nf">getMods</span><span class="p">(</span> <span class="k">struct</span> <span class="n">RE</span> <span class="o">*</span><span class="n">rexp</span><span class="p">,</span> <span class="k">struct</span> <span class="n">RE</span> <span class="o">*</span><span class="n">track</span> <span class="p">){</span>
+  <span class="kt">int</span> <span class="n">inMods</span> <span class="o">=</span> <span class="o">*</span><span class="n">rexp</span><span class="o">-&gt;</span><span class="n">ptr</span> <span class="o">==</span> <span class="sa"></span><span class="sc">&#39;#&#39;</span><span class="p">,</span> <span class="n">pos</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>             <span class="c1">// ➊
+</span><span class="c1"></span>
+  <span class="k">while</span><span class="p">(</span> <span class="n">inMods</span> <span class="p">)</span>                                      <span class="c1">// ➋
+</span><span class="c1"></span>    <span class="k">switch</span><span class="p">(</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">[</span> <span class="o">++</span><span class="n">pos</span> <span class="p">]</span> <span class="p">){</span>                      <span class="c1">// ➌
+</span><span class="c1"></span>    <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;^&#39;</span><span class="o">:</span> <span class="n">track</span><span class="o">-&gt;</span><span class="n">mods</span> <span class="o">|=</span>  <span class="n">MOD_ALPHA</span>     <span class="p">;</span> <span class="k">break</span><span class="p">;</span>
+    <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;$&#39;</span><span class="o">:</span> <span class="n">track</span><span class="o">-&gt;</span><span class="n">mods</span> <span class="o">|=</span>  <span class="n">MOD_OMEGA</span>     <span class="p">;</span> <span class="k">break</span><span class="p">;</span>
+    <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;?&#39;</span><span class="o">:</span> <span class="n">track</span><span class="o">-&gt;</span><span class="n">mods</span> <span class="o">|=</span>  <span class="n">MOD_LONLEY</span>    <span class="p">;</span> <span class="k">break</span><span class="p">;</span>
+    <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;~&#39;</span><span class="o">:</span> <span class="n">track</span><span class="o">-&gt;</span><span class="n">mods</span> <span class="o">|=</span>  <span class="n">MOD_FwrByChar</span> <span class="p">;</span> <span class="k">break</span><span class="p">;</span>
+    <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;*&#39;</span><span class="o">:</span> <span class="n">track</span><span class="o">-&gt;</span><span class="n">mods</span> <span class="o">|=</span>  <span class="n">MOD_COMMUNISM</span> <span class="p">;</span> <span class="k">break</span><span class="p">;</span>
+    <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;/&#39;</span><span class="o">:</span> <span class="n">track</span><span class="o">-&gt;</span><span class="n">mods</span> <span class="o">&amp;=</span> <span class="o">~</span><span class="n">MOD_COMMUNISM</span> <span class="p">;</span> <span class="k">break</span><span class="p">;</span>
+    <span class="k">default</span> <span class="o">:</span> <span class="n">inMods</span>       <span class="o">=</span>  <span class="n">FALSE</span>         <span class="p">;</span> <span class="k">break</span><span class="p">;</span>   <span class="c1">// ➍
+</span><span class="c1"></span>    <span class="p">}</span>
+
+  <span class="k">if</span><span class="p">(</span> <span class="n">pos</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="p">)</span> <span class="n">fwrTrack</span><span class="p">(</span> <span class="n">rexp</span><span class="p">,</span> <span class="n">pos</span> <span class="p">);</span>                 <span class="c1">// ➎
+</span><span class="c1"></span><span class="p">}</span>
+</code></pre>
+<p>El funcionamiento se basa en el mismo principio que <code>getLoops</code>, lo que significa que si el constructor posee algun modificador, deberia encontrarse en la posicion inicial de <code>rexp</code> ➊. De ser asi, recorremos y asignamos los valores en la cadena de modificadores ➋➌ hasta que el signo en cuestion no se identifique como un modificador ➍. Una vez que optenemos la informacion, la cadena de mods se descarta ➎.</p>
+<p>Por cierto, antes de modificar o agregar nuevos mods, considera la sintaxis actual, mal negocio seria agregar los signos <code>|</code>, <code>(</code>, <code>)</code>, ..., etc.</p>
+<p>Como hacemos para otener los mods de los constructores? (¬‿¬) je, recuerdas que vamos a colocar los modificadores despues de los cuantificadores? (pista: en que funcion esta <code>getLoops</code>?)</p>
+<pre class="code" ><code class="chroma" > <span class="k">static</span> <span class="kt">int</span> <span class="nf">tracker</span><span class="p">(</span> <span class="k">struct</span> <span class="n">RE</span> <span class="o">*</span><span class="n">rexp</span><span class="p">,</span> <span class="k">struct</span> <span class="n">RE</span> <span class="o">*</span><span class="n">track</span> <span class="p">){</span>
+  <span class="k">if</span><span class="p">(</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">len</span> <span class="o">==</span> <span class="mi">0</span> <span class="p">)</span> <span class="k">return</span> <span class="n">FALSE</span><span class="p">;</span>
+
+  <span class="k">switch</span><span class="p">(</span> <span class="o">*</span><span class="n">rexp</span><span class="o">-&gt;</span><span class="n">ptr</span> <span class="p">){</span>
+  <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;:&#39;</span><span class="o">:</span> <span class="n">trackByLen</span> <span class="p">(</span> <span class="n">rexp</span><span class="p">,</span> <span class="n">track</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">META</span>  <span class="p">);</span> <span class="k">break</span><span class="p">;</span>
+  <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;.&#39;</span><span class="o">:</span> <span class="n">trackByLen</span> <span class="p">(</span> <span class="n">rexp</span><span class="p">,</span> <span class="n">track</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">POINT</span> <span class="p">);</span> <span class="k">break</span><span class="p">;</span>
+  <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;(&#39;</span><span class="o">:</span> <span class="n">trackByType</span><span class="p">(</span> <span class="n">rexp</span><span class="p">,</span> <span class="n">track</span><span class="p">,</span>    <span class="n">GROUP</span> <span class="p">);</span> <span class="k">break</span><span class="p">;</span>
+  <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;&lt;&#39;</span><span class="o">:</span> <span class="n">trackByType</span><span class="p">(</span> <span class="n">rexp</span><span class="p">,</span> <span class="n">track</span><span class="p">,</span>    <span class="n">HOOK</span>  <span class="p">);</span> <span class="k">break</span><span class="p">;</span>
+  <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;[&#39;</span><span class="o">:</span> <span class="n">trackByType</span><span class="p">(</span> <span class="n">rexp</span><span class="p">,</span> <span class="n">track</span><span class="p">,</span>    <span class="n">SET</span>   <span class="p">);</span> <span class="k">break</span><span class="p">;</span>
+  <span class="k">default</span> <span class="o">:</span>
+    <span class="k">for</span><span class="p">(</span> <span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">len</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span> <span class="p">)</span>
+      <span class="k">switch</span><span class="p">(</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">[</span> <span class="n">i</span> <span class="p">]</span> <span class="p">){</span>
+      <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;(&#39;</span><span class="o">:</span> <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;&lt;&#39;</span><span class="o">:</span> <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;[&#39;</span><span class="o">:</span> <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;:&#39;</span><span class="o">:</span> <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;.&#39;</span><span class="o">:</span>
+        <span class="n">trackByLen</span><span class="p">(</span> <span class="n">rexp</span><span class="p">,</span> <span class="n">track</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="n">SIMPLE</span>  <span class="p">);</span> <span class="k">goto</span> <span class="n">getLM</span><span class="p">;</span>
+      <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;?&#39;</span><span class="o">:</span> <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;+&#39;</span><span class="o">:</span> <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;*&#39;</span><span class="o">:</span> <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;{&#39;</span><span class="o">:</span> <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;-&#39;</span><span class="o">:</span> <span class="k">case</span> <span class="sa"></span><span class="sc">&#39;#&#39;</span><span class="o">:</span> <span class="c1">// ➊
+</span><span class="c1"></span>        <span class="k">if</span><span class="p">(</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">1</span> <span class="p">){</span>
+          <span class="k">if</span><span class="p">(</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">==</span> <span class="sa"></span><span class="sc">&#39;-&#39;</span> <span class="p">)</span> <span class="n">trackByLen</span><span class="p">(</span> <span class="n">rexp</span><span class="p">,</span> <span class="n">track</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">RANGEAB</span> <span class="p">);</span>
+          <span class="k">else</span>                      <span class="n">trackByLen</span><span class="p">(</span> <span class="n">rexp</span><span class="p">,</span> <span class="n">track</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">SIMPLE</span>  <span class="p">);</span>
+        <span class="p">}</span> <span class="k">else</span>                      <span class="n">trackByLen</span><span class="p">(</span> <span class="n">rexp</span><span class="p">,</span> <span class="n">track</span><span class="p">,</span> <span class="n">i</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">SIMPLE</span>  <span class="p">);</span>
+        <span class="k">goto</span> <span class="n">getLM</span><span class="p">;</span>
+      <span class="p">}</span>
+
+    <span class="n">trackByLen</span><span class="p">(</span> <span class="n">rexp</span><span class="p">,</span> <span class="n">track</span><span class="p">,</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">len</span><span class="p">,</span> <span class="n">SIMPLE</span>  <span class="p">);</span>
+  <span class="p">}</span>
+
+ <span class="nl">getLM</span><span class="p">:</span> <span class="c1">// ➋
+</span><span class="c1"></span>  <span class="n">getLoops</span><span class="p">(</span> <span class="n">rexp</span><span class="p">,</span> <span class="n">track</span> <span class="p">);</span>
+  <span class="n">getMods</span> <span class="p">(</span> <span class="n">rexp</span><span class="p">,</span> <span class="n">track</span> <span class="p">);</span>
+  <span class="k">return</span> <span class="n">TRUE</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre>
+<p>Exacto! agregamos <code>getMods</code> ➋ inmediatamente despues de <code>getLoops</code>, el resto solo es colocar un nuevo signo en los casos de <q>corte</q> ➊➋. Vuala! cada constructor cargara sus mods! o no... Mira bien el comportamiento de las dos funciones <code>get</code>, toma tu tiempo.</p>
+<p>Notas la diferencia? <code>getLoops</code> siempre establece valores por defecto. Por su parte <code>getMods</code> se limita a modificar los valores que indiquemos, y como todos los constructores inician como copias de un constructor <em>de orden superior</em> (el primero en <code>regexp3</code>) no puede significar otra cosa mas que los modificadores se heredan. Si establecemos algun modificador en el constructor primigenio sera transmitido a todos sus descendientes.</p>
+<pre class="code" ><code class="chroma" ><span class="kt">unsigned</span> <span class="kt">int</span> <span class="nf">regexp3</span><span class="p">(</span> <span class="kt">char</span> <span class="o">*</span><span class="n">txt</span><span class="p">,</span> <span class="kt">char</span> <span class="o">*</span><span class="n">re</span> <span class="p">){</span>
+  <span class="k">struct</span> <span class="n">RE</span>    <span class="n">rexp</span><span class="p">;</span>
+  <span class="n">rexp</span><span class="p">.</span><span class="n">ptr</span>     <span class="o">=</span> <span class="n">re</span><span class="p">;</span>
+  <span class="n">rexp</span><span class="p">.</span><span class="n">type</span>    <span class="o">=</span> <span class="n">PATH</span><span class="p">;</span>
+  <span class="n">rexp</span><span class="p">.</span><span class="n">mods</span>    <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>         <span class="c1">// ➊
+</span><span class="c1"></span>  <span class="n">rexp</span><span class="p">.</span><span class="n">len</span>     <span class="o">=</span> <span class="n">strlen</span><span class="p">(</span> <span class="n">re</span> <span class="p">);</span>
+  <span class="n">text</span><span class="p">.</span><span class="n">len</span>     <span class="o">=</span> <span class="n">strlen</span><span class="p">(</span> <span class="n">txt</span> <span class="p">);</span>
+
+  <span class="k">if</span><span class="p">(</span> <span class="n">text</span><span class="p">.</span><span class="n">len</span> <span class="o">==</span> <span class="mi">0</span> <span class="o">||</span> <span class="n">rexp</span><span class="p">.</span><span class="n">len</span> <span class="o">==</span> <span class="mi">0</span> <span class="p">)</span> <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+
+  <span class="n">getMods</span><span class="p">(</span> <span class="o">&amp;</span><span class="n">rexp</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">rexp</span> <span class="p">);</span>  <span class="c1">// ➋
+</span><span class="c1"></span>
+  <span class="kt">int</span> <span class="n">result</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">txtLen</span> <span class="o">=</span> <span class="n">text</span><span class="p">.</span><span class="n">len</span><span class="p">;</span>
+  <span class="k">for</span><span class="p">(</span> <span class="kt">int</span> <span class="n">forward</span><span class="p">,</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">loops</span> <span class="o">=</span> <span class="n">rexp</span><span class="p">.</span><span class="n">mods</span> <span class="o">&amp;</span> <span class="n">MOD_ALPHA</span> <span class="o">?</span> <span class="mi">1</span> <span class="o">:</span> <span class="n">text</span><span class="p">.</span><span class="n">len</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">loops</span><span class="p">;</span> <span class="n">i</span> <span class="o">+=</span> <span class="n">forward</span> <span class="p">){</span>  <span class="c1">// ➌
+</span><span class="c1"></span>    <span class="n">forward</span>    <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="n">text</span><span class="p">.</span><span class="n">pos</span>   <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="n">text</span><span class="p">.</span><span class="n">ptr</span>   <span class="o">=</span> <span class="n">txt</span>    <span class="o">+</span> <span class="n">i</span><span class="p">;</span>
+    <span class="n">text</span><span class="p">.</span><span class="n">len</span>   <span class="o">=</span> <span class="n">txtLen</span> <span class="o">-</span> <span class="n">i</span><span class="p">;</span>
+
+    <span class="k">if</span><span class="p">(</span> <span class="n">walker</span><span class="p">(</span> <span class="n">rexp</span> <span class="p">)</span> <span class="p">){</span>
+      <span class="k">if</span>     <span class="p">(</span>  <span class="n">rexp</span><span class="p">.</span><span class="n">mods</span> <span class="o">&amp;</span> <span class="n">MOD_OMEGA</span>    <span class="p">){</span> <span class="k">if</span><span class="p">(</span> <span class="n">text</span><span class="p">.</span><span class="n">pos</span> <span class="o">==</span> <span class="n">text</span><span class="p">.</span><span class="n">len</span> <span class="p">)</span> <span class="k">return</span> <span class="n">TRUE</span><span class="p">;</span> <span class="p">}</span>  <span class="c1">// ➍
+</span><span class="c1"></span>      <span class="k">else</span> <span class="k">if</span><span class="p">(</span>  <span class="n">rexp</span><span class="p">.</span><span class="n">mods</span> <span class="o">&amp;</span> <span class="n">MOD_LONLEY</span>   <span class="p">)</span>                             <span class="k">return</span> <span class="n">TRUE</span><span class="p">;</span>    <span class="c1">// ➎
+</span><span class="c1"></span>      <span class="k">else</span> <span class="k">if</span><span class="p">(</span> <span class="p">(</span><span class="n">rexp</span><span class="p">.</span><span class="n">mods</span> <span class="o">&amp;</span> <span class="n">MOD_FwrByChar</span><span class="p">)</span> <span class="o">||</span> <span class="n">text</span><span class="p">.</span><span class="n">pos</span> <span class="o">==</span> <span class="mi">0</span> <span class="p">)</span>          <span class="n">result</span><span class="o">++</span><span class="p">;</span>       <span class="c1">// ➏
+</span><span class="c1"></span>      <span class="k">else</span>   <span class="p">{</span>  <span class="n">forward</span> <span class="o">=</span> <span class="n">text</span><span class="p">.</span><span class="n">pos</span><span class="p">;</span>                                    <span class="n">result</span><span class="o">++</span><span class="p">;</span> <span class="p">}</span>     <span class="c1">// ➐
+</span><span class="c1"></span>    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="k">return</span> <span class="n">result</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre>
+<p>El constructor fundamental, inicia con ningun modifidor ➊. Los modificadores que en este sean establecidos ➋, tendran un alcance global, claro, siempre y cuando tengamos codigo para una tarea especifica, por ejemplo, podemos aplicar los modificadores <code>^</code> o <code>$</code> o <code>?</code> o <code>~</code> al primer constructor y luego ignorarlos en todos sus descendientes, al fin y al cabo, solo nos importan para modificar el comportamiento del ciclo por la cadena ➌.</p>
+<p>Veamos a detalle las alteraciones principales:</p>
+<p>Si tenemos el bit <code>MOD_ALPHA</code> encendido, aplicamos solo un ciclo (primera posicion de la cadena) ➌.</p>
+<p>Si hay una coincidencia y el bit <code>MOD_OMEGA</code> esta encendido comprobamos que la coincidencia abarque el resto de la cadena, si es asi tenemos la coincidencia que buscamos ➍.</p>
+<p>Si la coincidencia ocurre con el bit <code>MOD_LONLEY</code> activo, detenemos la busqueda con la primer coincidencia ➎.</p>
+<p>Si el bit activo es <code>MOD_FwrByChar</code> o la longitud de la captura es de 0 caracteres (que ocacionarian bucles infinitos), la busqueda continuara en la posicion siguiente ➏.</p>
+<p>Si no hay ningun modificador, simplemente incrementamos el contador de coincidencias y la sigiente posicion del ciclo por la cadena estara al final de la coincidencia ➐.</p>
+<p>Para terminar, tenemos un modificador que afecta el comportamiento de los constructores de formo individual, el <code>MOD_COMMUNISM</code>. Hace que los caracteres alfabeticos coincidan tanto con mayusculas como con minisculas. Cuando asignamos el mod de forma global se transmite a todos los constructores, por ello existe el <b>MOD CAPITALISTA</b>, su funcion es terminar con la igualdad, de hecho este es el comportamiento por defecto.</p>
+<p>Naturalmente, dicho mod sera aplicado en las fuciones de busqueda</p>
+<pre class="code" ><code class="chroma" ><span class="k">static</span> <span class="kt">int</span> <span class="nf">matchText</span><span class="p">(</span> <span class="k">struct</span> <span class="n">RE</span> <span class="o">*</span><span class="n">rexp</span><span class="p">,</span> <span class="kt">char</span> <span class="o">*</span><span class="n">txt</span> <span class="p">){</span>
+  <span class="k">if</span><span class="p">(</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">mods</span> <span class="o">&amp;</span> <span class="n">MOD_COMMUNISM</span> <span class="p">)</span>     <span class="c1">// ➊
+</span><span class="c1"></span>    <span class="k">return</span>    <span class="n">strnCmpCommunist</span><span class="p">(</span> <span class="n">txt</span><span class="p">,</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">,</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">len</span> <span class="p">)</span>  <span class="o">==</span> <span class="mi">0</span> <span class="o">?</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="nl">len</span> <span class="p">:</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="k">else</span> <span class="k">return</span> <span class="n">strncmp</span>         <span class="p">(</span> <span class="n">txt</span><span class="p">,</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">,</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">len</span> <span class="p">)</span>  <span class="o">==</span> <span class="mi">0</span> <span class="o">?</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="nl">len</span> <span class="p">:</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre>
+<pre class="code" ><code class="chroma" ><span class="k">static</span> <span class="kt">int</span> <span class="nf">matchRange</span><span class="p">(</span> <span class="k">struct</span> <span class="n">RE</span> <span class="o">*</span><span class="n">rexp</span><span class="p">,</span> <span class="kt">int</span> <span class="n">chr</span> <span class="p">){</span>
+  <span class="k">if</span><span class="p">(</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">mods</span> <span class="o">&amp;</span> <span class="n">MOD_COMMUNISM</span> <span class="p">){</span>    <span class="c1">// ➋
+</span><span class="c1"></span>    <span class="n">chr</span> <span class="o">=</span> <span class="n">tolower</span><span class="p">(</span> <span class="n">chr</span> <span class="p">);</span>
+    <span class="k">return</span> <span class="n">chr</span> <span class="o">&gt;=</span> <span class="n">tolower</span><span class="p">(</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">[</span> <span class="mi">0</span> <span class="p">]</span> <span class="p">)</span> <span class="o">&amp;&amp;</span> <span class="n">chr</span> <span class="o">&lt;=</span> <span class="n">tolower</span><span class="p">(</span> <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">[</span> <span class="mi">2</span> <span class="p">]</span> <span class="p">);</span>
+  <span class="p">}</span> <span class="k">else</span>
+    <span class="k">return</span> <span class="n">chr</span> <span class="o">&gt;=</span>          <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">[</span> <span class="mi">0</span> <span class="p">]</span>   <span class="o">&amp;&amp;</span> <span class="n">chr</span> <span class="o">&lt;=</span>          <span class="n">rexp</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">[</span> <span class="mi">2</span> <span class="p">];</span>
+<span class="p">}</span>
+</code></pre>
+<pre class="code" ><code class="chroma" ><span class="k">static</span> <span class="kt">int</span> <span class="nf">matchSet</span><span class="p">(</span> <span class="k">struct</span> <span class="n">RE</span> <span class="n">rexp</span> <span class="p">){</span>
+  <span class="k">struct</span> <span class="n">RE</span> <span class="n">track</span><span class="p">;</span>
+  <span class="kt">int</span> <span class="n">result</span>  <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">reverse</span> <span class="o">=</span> <span class="o">*</span><span class="n">rexp</span><span class="p">.</span><span class="n">ptr</span> <span class="o">==</span> <span class="sa"></span><span class="sc">&#39;^&#39;</span><span class="p">;</span>
+
+  <span class="k">if</span><span class="p">(</span> <span class="n">reverse</span> <span class="p">)</span> <span class="n">fwrTrack</span><span class="p">(</span> <span class="o">&amp;</span><span class="n">rexp</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+
+  <span class="k">while</span><span class="p">(</span> <span class="n">tracker</span><span class="p">(</span> <span class="o">&amp;</span><span class="n">rexp</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">track</span> <span class="p">)</span> <span class="p">){</span>
+    <span class="k">switch</span><span class="p">(</span> <span class="n">track</span><span class="p">.</span><span class="n">type</span> <span class="p">){</span>
+    <span class="k">case</span> <span class="nl">RANGEAB</span><span class="p">:</span> <span class="k">case</span> <span class="nl">META</span><span class="p">:</span> <span class="k">case</span> <span class="nl">POINT</span><span class="p">:</span>
+      <span class="n">result</span> <span class="o">=</span> <span class="n">match</span><span class="p">(</span> <span class="o">&amp;</span><span class="n">track</span> <span class="p">);</span> <span class="k">break</span><span class="p">;</span>
+    <span class="k">default</span><span class="o">:</span>
+      <span class="k">if</span><span class="p">(</span> <span class="n">track</span><span class="p">.</span><span class="n">mods</span> <span class="o">&amp;</span> <span class="n">MOD_COMMUNISM</span> <span class="p">)</span> <span class="c1">// ➌
+</span><span class="c1"></span>           <span class="n">result</span> <span class="o">=</span> <span class="n">strnChrCommunist</span><span class="p">(</span> <span class="n">track</span><span class="p">.</span><span class="n">ptr</span><span class="p">,</span> <span class="n">text</span><span class="p">.</span><span class="n">ptr</span><span class="p">[</span> <span class="n">text</span><span class="p">.</span><span class="n">pos</span> <span class="p">],</span> <span class="n">track</span><span class="p">.</span><span class="n">len</span>  <span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">;</span>
+      <span class="k">else</span> <span class="n">result</span> <span class="o">=</span> <span class="n">strnChr</span>         <span class="p">(</span> <span class="n">track</span><span class="p">.</span><span class="n">ptr</span><span class="p">,</span> <span class="n">text</span><span class="p">.</span><span class="n">ptr</span><span class="p">[</span> <span class="n">text</span><span class="p">.</span><span class="n">pos</span> <span class="p">],</span> <span class="n">track</span><span class="p">.</span><span class="n">len</span>  <span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="k">if</span><span class="p">(</span> <span class="n">result</span> <span class="p">)</span> <span class="k">return</span> <span class="n">reverse</span> <span class="o">?</span> <span class="nl">FALSE</span> <span class="p">:</span> <span class="n">result</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="k">return</span> <span class="n">reverse</span> <span class="o">?</span> <span class="nl">TRUE</span> <span class="p">:</span> <span class="n">FALSE</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre>
+<p>Unicamente necesitamos conocer el estado del modificador ➊➋➌, luego, con ayuda de tres nuevas funciones (examinalas por tu cuenta) realizamos la busqueda segun sea el caso.</p>
+<p>Como puedes apreciar, ahora los constructores de tipo <code>RANGEAB</code> tienen su propia funcion. Es demasido extensa como para permanecer en <code>match</code>. En cambio <code>matchMeta</code> no fue afectado, ninguno de los metacaracteres definidos requiere cambios.</p>
+<p>Antes de concluir verificamos que las prubebas previas no presenten errores y agregamos una cuantas mas:</p>
+<pre class="code" ><code class="chroma" ><span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;ABC&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#^A&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;ABC&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#^AB&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;ABC&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#^ABC&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;ABC&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#^(b|A)&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;ABC&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#^A(B|C)(B|C)&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;ABC&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#^(A(B|C))(B|C)&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;ABC&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#$C&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;ABC&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#$BC&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;ABC&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#$ABC&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;ABC&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#$(b|C)&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;ABC&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#$A(B|C)(B|C)&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;ABC&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#$(A(B|C))(B|C)&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;ABC&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#^$ABC&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;ABC&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#^$A(c|B)(b|C)&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;ABC&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#^$A(B|C)(B|C)&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;ABC&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#^$(A(B|C))(B|C)&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;ABC&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#^E&#34;</span><span class="p">,</span> <span class="mi">0</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;ABC&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#^EB&#34;</span><span class="p">,</span> <span class="mi">0</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;ABC&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#^EBC&#34;</span><span class="p">,</span> <span class="mi">0</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;ABC&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#^(b|c)&#34;</span><span class="p">,</span> <span class="mi">0</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;ABC&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#^A(B|C)(B|E)&#34;</span><span class="p">,</span> <span class="mi">0</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;ABC&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#^(A(B|C))(B|E)&#34;</span><span class="p">,</span> <span class="mi">0</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;ABC&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#$E&#34;</span><span class="p">,</span> <span class="mi">0</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;ABC&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#$BE&#34;</span><span class="p">,</span> <span class="mi">0</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;ABC&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#$ABE&#34;</span><span class="p">,</span> <span class="mi">0</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;ABC&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#$(b|E)&#34;</span><span class="p">,</span> <span class="mi">0</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;ABC&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#$A(B|C)(B|E)&#34;</span><span class="p">,</span> <span class="mi">0</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;ABC&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#$(A(B|C))(B|E)&#34;</span><span class="p">,</span> <span class="mi">0</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;ABC&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#^$ABE&#34;</span><span class="p">,</span> <span class="mi">0</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;ABC&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#^$A(c|B)(b|E)&#34;</span><span class="p">,</span> <span class="mi">0</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;ABC&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#^$A(B|C)(B|E)&#34;</span><span class="p">,</span> <span class="mi">0</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;ABC&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#^$(A(B|C))(B|E)&#34;</span><span class="p">,</span> <span class="mi">0</span> <span class="p">);</span>
+
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;A&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;a#*&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;A&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;a?#*&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;A&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;b?#*&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;A&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;a+#*&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;A&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;a*#*&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;A&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;b*#*&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAa&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;a#*&#34;</span><span class="p">,</span> <span class="mi">3</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAa&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;a+#*&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAa&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;a*#*&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAa&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;a+#*&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAa&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;a?#*&#34;</span><span class="p">,</span> <span class="mi">3</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAab&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;a+#*&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAab&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;a*#*&#34;</span><span class="p">,</span> <span class="mi">2</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAab&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;a?#*&#34;</span><span class="p">,</span> <span class="mi">4</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAab&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;a+#*?^$~b&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAab&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;a*#*?^$~b&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAab&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;a?#*?^$~b&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAab&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;a+#*?^$~b?&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAab&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;a*#*?^$~b?&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAab&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;a?#*?^$~b?&#34;</span><span class="p">,</span> <span class="mi">3</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAab&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;a+#*?^$~b+&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAab&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;a*#*?^$~b+&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAab&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;a?#*?^$~b+&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAab&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;a+#*?^$~b*&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAab&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;a*#*?^$~b*&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAab&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;a?#*?^$~b*&#34;</span><span class="p">,</span> <span class="mi">3</span> <span class="p">);</span>
+
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;a#*&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;A#*&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#*A&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#*a&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#*(A)&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#*(a)&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#*[A]&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#*[a]&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#*A-Z&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;A-Z#*&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;(a)#*&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;(A)#*&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;[a]#*&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;[A]#*&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#*[A-Z]&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;[A-Z]#*&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAaA&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;a#*&#34;</span><span class="p">,</span> <span class="mi">4</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAaA&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;A#*&#34;</span><span class="p">,</span> <span class="mi">4</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAaA&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#*A&#34;</span><span class="p">,</span> <span class="mi">4</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAaA&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#*a&#34;</span><span class="p">,</span> <span class="mi">4</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAaA&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#*(A)&#34;</span><span class="p">,</span> <span class="mi">4</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAaA&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#*(a)&#34;</span><span class="p">,</span> <span class="mi">4</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAaA&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#*[A]&#34;</span><span class="p">,</span> <span class="mi">4</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAaA&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#*[a]&#34;</span><span class="p">,</span> <span class="mi">4</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAaA&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#*A-Z&#34;</span><span class="p">,</span> <span class="mi">4</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAaA&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;A-Z#*&#34;</span><span class="p">,</span> <span class="mi">4</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAaA&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;(a)#*&#34;</span><span class="p">,</span> <span class="mi">4</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAaA&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;(A)#*&#34;</span><span class="p">,</span> <span class="mi">4</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAaA&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;[a]#*&#34;</span><span class="p">,</span> <span class="mi">4</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAaA&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;[A]#*&#34;</span><span class="p">,</span> <span class="mi">4</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAaA&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#*[A-Z]&#34;</span><span class="p">,</span> <span class="mi">4</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAaA&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;[A-Z]#*&#34;</span><span class="p">,</span> <span class="mi">4</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAaA&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;(a#*)&#34;</span><span class="p">,</span> <span class="mi">4</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAaA&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;(A#*)&#34;</span><span class="p">,</span> <span class="mi">4</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAaA&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;(a)#*&#34;</span><span class="p">,</span> <span class="mi">4</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAaA&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;(A)#*&#34;</span><span class="p">,</span> <span class="mi">4</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAbB&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#*a|b&#34;</span><span class="p">,</span> <span class="mi">4</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAbB&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#*A|B&#34;</span><span class="p">,</span> <span class="mi">4</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAbB&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#*(a|b)&#34;</span><span class="p">,</span> <span class="mi">4</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAbB&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#*(A|B)&#34;</span><span class="p">,</span> <span class="mi">4</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAbB&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;(a#*|b#*)&#34;</span><span class="p">,</span> <span class="mi">4</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAbB&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;(A#*|B#*)&#34;</span><span class="p">,</span> <span class="mi">4</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAbB&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;(a|b)#*&#34;</span><span class="p">,</span> <span class="mi">4</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAbB&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;(A|B)#*&#34;</span><span class="p">,</span> <span class="mi">4</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;TesT&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;test&#34;</span><span class="p">,</span> <span class="mi">0</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;TesT&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;test#*&#34;</span><span class="p">,</span> <span class="mi">0</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;TesT&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;t#*est#*&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;TesT&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#*test&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;TesT&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#*tESt&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;TesT&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#*(tESt)&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;TesT&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;(tESt)#*&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a aaa aaa&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#^aaa&#34;</span><span class="p">,</span> <span class="mi">0</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a aaa aaa&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#$aaa&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a aaa aaa&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#?aaa&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a aaa aaa&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#~aaa&#34;</span><span class="p">,</span> <span class="mi">2</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a aaa aaa&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#^?aaa&#34;</span><span class="p">,</span> <span class="mi">0</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a aaa aaa&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#?^aaa&#34;</span><span class="p">,</span> <span class="mi">0</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a aaa aaa&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#?$aaa&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a aaa aaa&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#^?$aaa&#34;</span><span class="p">,</span> <span class="mi">0</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a aaa aaa&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#?$^aaa&#34;</span><span class="p">,</span> <span class="mi">0</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a aaa aaa&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#^?$a aaa aaa&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aa aaaa aaaa&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#~a&#34;</span><span class="p">,</span> <span class="mi">10</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aa aaaa aaaa&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#~aa&#34;</span><span class="p">,</span> <span class="mi">7</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aa aaaa aaaa&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#~aaa&#34;</span><span class="p">,</span> <span class="mi">4</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aaaaaaaaaaaaaaaaaaaa&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#?a+&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;abababababababababababababababababababab&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#?a+&#34;</span> <span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aaaaaaaaaaaaaaaaaaaa&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#~a+&#34;</span><span class="p">,</span> <span class="mi">20</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;abababababababababababababababababababab&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#~a+&#34;</span> <span class="p">,</span> <span class="mi">20</span> <span class="p">);</span>
+
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;Raptor TesT Fest&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;RapTor (tESt)#* fEST&#34;</span><span class="p">,</span> <span class="mi">0</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;Raptor TesT Fest&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#*rapTor (tESt) fEST&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;Raptor TesT Fest&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;(RapTor)#* (tESt)#* (fEST)#*&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;Raptor TesT Fest&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;((Rap#*Tor)#* (t#*ESt)#* (fEST)#*)#*&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;Raptor TesT Fest&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#*a-z#*apTor (tESt) A-Z#*EST&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;a#/&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;A#/&#34;</span><span class="p">,</span> <span class="mi">0</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#/A&#34;</span><span class="p">,</span> <span class="mi">0</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#/a&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#/(A)&#34;</span><span class="p">,</span> <span class="mi">0</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#/(a)&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#/[A]&#34;</span><span class="p">,</span> <span class="mi">0</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#/[a]&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#/A-Z&#34;</span><span class="p">,</span> <span class="mi">0</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;A-Z#/&#34;</span><span class="p">,</span> <span class="mi">0</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;(a)#/&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;(A)#/&#34;</span><span class="p">,</span> <span class="mi">0</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;[a]#/&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;[A]#/&#34;</span><span class="p">,</span> <span class="mi">0</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#/[A-Z]&#34;</span><span class="p">,</span> <span class="mi">0</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;a&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;[A-Z]#/&#34;</span><span class="p">,</span> <span class="mi">0</span> <span class="p">);</span>
+
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAaA&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;a#/&#34;</span><span class="p">,</span> <span class="mi">2</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAaA&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;A#/&#34;</span><span class="p">,</span> <span class="mi">2</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAaA&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#/A&#34;</span><span class="p">,</span> <span class="mi">2</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAaA&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#/a&#34;</span><span class="p">,</span> <span class="mi">2</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAaA&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#/(A)&#34;</span><span class="p">,</span> <span class="mi">2</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAaA&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#/(a)&#34;</span><span class="p">,</span> <span class="mi">2</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAaA&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#/[A]&#34;</span><span class="p">,</span> <span class="mi">2</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAaA&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#/[a]&#34;</span><span class="p">,</span> <span class="mi">2</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAaA&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#/A-Z&#34;</span><span class="p">,</span> <span class="mi">2</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAaA&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;A-Z#/&#34;</span><span class="p">,</span> <span class="mi">2</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAaA&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;(a)#/&#34;</span><span class="p">,</span> <span class="mi">2</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAaA&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;(A)#/&#34;</span><span class="p">,</span> <span class="mi">2</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAaA&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;[a]#/&#34;</span><span class="p">,</span> <span class="mi">2</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAaA&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;[A]#/&#34;</span><span class="p">,</span> <span class="mi">2</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAaA&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#/[A-Z]&#34;</span><span class="p">,</span> <span class="mi">2</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAaA&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;[A-Z]#/&#34;</span><span class="p">,</span> <span class="mi">2</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAaA&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;(a#/)&#34;</span><span class="p">,</span> <span class="mi">2</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAaA&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;(A#/)&#34;</span><span class="p">,</span> <span class="mi">2</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAaA&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;(a)#/&#34;</span><span class="p">,</span> <span class="mi">2</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAaA&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;(A)#/&#34;</span><span class="p">,</span> <span class="mi">2</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAbB&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#/a|b&#34;</span><span class="p">,</span> <span class="mi">2</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAbB&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#/A|B&#34;</span><span class="p">,</span> <span class="mi">2</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAbB&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#/(a|b)&#34;</span><span class="p">,</span> <span class="mi">2</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAbB&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#/(A|B)&#34;</span><span class="p">,</span> <span class="mi">2</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAbB&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;(a#/|b#/)&#34;</span><span class="p">,</span> <span class="mi">2</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAbB&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;(A#/|B#/)&#34;</span><span class="p">,</span> <span class="mi">2</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAbB&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;(a|b)#/&#34;</span><span class="p">,</span> <span class="mi">2</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;aAbB&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;(A|B)#/&#34;</span><span class="p">,</span> <span class="mi">2</span> <span class="p">);</span>
+
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;Raptor TesT Fest&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#*rapTor (tESt)#/ fEST&#34;</span><span class="p">,</span> <span class="mi">0</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;Raptor tESt Fest&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#*rapTor (tESt)#/ fEST&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;Raptor TesT Fest&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#*rapTor (tE#/S#/t)#* fEST&#34;</span><span class="p">,</span> <span class="mi">0</span> <span class="p">);</span>
+<span class="n">NTEST</span><span class="p">(</span> <span class="sa"></span><span class="s">&#34;Raptor tESt Fest&#34;</span><span class="p">,</span> <span class="sa"></span><span class="s">&#34;#*rapTor (tE#/S#/t)#* fEST&#34;</span><span class="p">,</span> <span class="mi">1</span> <span class="p">);</span>
+</code></pre>
+</div>
 <h4 id="CATCH" ><code>CATCH</code></h4>
 <h4 id="backreferences" >backreferences</h4>
 <h4 id="Stand-Alone-Complex" >Stand Alone Complex</h4>
