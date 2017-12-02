@@ -2450,7 +2450,7 @@
     ver que el codigo es identico al de la condicion @c(GROUP), solamente se a
     adaptado el mensaje de salida.
 
-    Algo mas estimulante sucende en @c(cutTrack) dentro del bucle @c(for)
+    Algo mas estimulante sucede en @c(trackByType) dentro del bucle @c(for)
 
     ..src > c
       for( int i = 0, deep = 0; i < rexp->len; i++ ){
@@ -5763,7 +5763,7 @@
     el caracter imediatamente despues del que utilizaste para este ciclo).
 
     @c(MOD_COMMUNISM), signo @c(*) sera el modificador @"(ignora entre
-    mayusculas y minusculas.
+    mayusculas y minusculas).
 
     finalmente signo @c(/), apaga el bit @c(MOD_COMMUNISM) para decir @"(no
     ignores entre mayusculas y minusculas), que es el comportamiento por
@@ -6165,6 +6165,722 @@
     < src..
 
 *** @c(CATCH)
+
+    Hace mucho, mucho, mucho codigo, casi al inicio del manual, se establecio la
+    sintaxis @"c(<...>) como una variante del constructor agrupacion, y
+    supuestamente serviria para indicarle al motor que almacenara la seccion de
+    la cadena que coincidiese con el patron de busqueda.
+
+    Ahora pues, el raptor es capaz de identificar dicha sistaxis, mas para
+    hacerla funcional, necesario es sortear las siguientes dificultades:
+
+    - La "dimencion" de las capturas es desconocido
+
+    - El numero de coincidencias... y capturas, tambien es desconocido
+
+
+    ( ︶︿︶) ... ... ... veamos... ... ... como en @c(RE) (la estructura que
+    almacena las datos de la RegExp), la forma obvia de almacenar los datos para
+    las capturas (siguiendo el @"(camido de C)) es tener variables relacionadas
+    agrupadas en una estructura y asi manejar estas variables como una unidad.
+
+    Como hemos aprendido con @c(RE), no hacemos copias de la cadena RegExp que
+    representan a los constructores, pues, necesitariamos gestionar dichas
+    copias (reservar el espacio, hacer la copia y liberar el espacio al
+    terminar). En su lugar utilizamos un puntero a la posicion de inicio de la
+    captura y un entero que registra su extension.
+
+    En cuanto al numero de capturas, la cantidad de estas es completamente
+    imprevisible, excepto, si no las hay.
+
+    Con un manejo dinamico de memoria, tras terminar el uso del motor tendriamos
+    que liberarla, algo asi
+
+    ..src > c
+      void regexp3_freeData();
+    < src..
+
+    cosa que no deseo hacer. Tambien podriamos pasar la responsabilidad al
+    usuario y obligarlo que nos envie un arreglo y su capacidad
+
+    ..src > c
+      unsigned int regexp3( char *txt, char *re, struct CATch *Catch, int catches );
+    < src..
+
+    o podriamos separar la funcion, inicializando antes el motor, asi:
+
+    ..src > c
+      void regexp3_init( struct CATch *Catch, int catches )
+    < src..
+
+    o poner un arreglo estatico, si, estatico! Por que no... un millon de
+    capturas... sumando por cada una un puntero de 64 bits y un entero de 64
+    bits para la longitud (el indice viene gratis), serian 122 MiB.... ho, ho,
+    ho, que en un equipo decente (> 4GB) viene a ser calderilla. De momento pongamos 16
+    para empezar, si hay problemas pues ¯\_(ツ)_/¯
+
+    Sorprendentemente los cambios necesarios a aplicar al codigo, son minimos,
+    asi que unicamente veremos dichas modificaciones. Intenta colocarlas de
+    forma armoniosa. Puede que necesites agregar algunos prototipos de funcion,
+    pero tambien puedes optar por colocar todo al inicio del codigo y ver si
+    compila.
+
+    Iniciemos con la estructura para almacenar las capturas:
+
+    ..src > c
+      #define MAX_CATCHS 16
+
+      struct CATch {
+        char *ptr[ MAX_CATCHS ];
+        int   len[ MAX_CATCHS ];
+        int   id [ MAX_CATCHS ];
+        int   idx;
+        int   index;
+      } static Catch;
+    < src..
+
+    He? no es lo que esperabas? En lugar de tener un arreglo de estructuras, la
+    estructura contiene un arreglo de datos para cada captura:
+
+    - @c(ptr), apunta al inicio de la coincidencia en la cadena
+
+    - @c(len), la dimencion de la coincidencia.
+
+    - @c(id), no es el indice de la captura, en vez de eso representa la posicion donde
+      aparece la captura con respecto a la regexp.
+
+      Si recibimos la llamada
+
+      ..src > c
+        regexp3( "uno-dos-uno-dos-uno-dos-uno", "<uno><dos>" )
+      < src..
+
+      El indice de capturas seria
+
+      ..example >
+        cadena    "uno-dos-uno-dos-uno-dos-uno"
+        captura    <1> <2> <3> <4> <5> <6> <7>
+      < example..
+
+      pero @e(el identificador) de la captura con respecto a la posicion en la
+      regexp seria
+
+      ..example >
+        cadena    "uno-dos-uno-dos-uno-dos-uno"
+        captura    <1> <2> <1> <2> <1> <2> <1>
+      < example..
+
+      haremos uso de este valor para modificar todas las apariciones de una
+      captura con repecto a su @c(id). Ya veremos los detalles mas adelante.
+
+
+    Utilizo @c(index) para que el motor sepa cual es la captura @"(actual),
+    ademas y en conjunto con la constante @c(MAX_CATCHS) evita ir mas alla de
+    los limites del arreglo.
+
+    @c(idx) es el indice @"(actual) con respecto a la posicion en cadena de cada
+    captura, @e(para cada ciclo). Esto quiere decir que en cada ciclo, el indice se
+    coloca a 1 (indice a partir de 1) y cada vez que aparece una indicacion de
+    captura @c(idx) se incrementa en 1. Por su puesto, si la captura falla, se
+    restaura este valor, al valor de inicio.
+
+    Tanto @c(idx) como @c(index) perfectamente podrian estar fuera de la
+    estructura incluso puede que sea mas adecuado:
+
+    ..src > c
+      #define MAX_CATCHS 16
+
+      struct CATch {
+        char *ptr;
+        int   len;
+        int   id ;
+      } static Catch[ MAX_CATCHS ];
+
+      int CatchIdx;
+      int CatchIndex;
+    < src..
+
+    no obstante, mantener todo agrupado bajo un solo @"(nombre) por alguna
+    extraña razon se ve mejor en (@s(mi cabeza)) el codigo. Puedes sumarlo al
+    resto de filias en cuanto al estilo de codificacion que utilizo
+
+    - alinear @"(lo que se puede alinear)
+    - instrucciones sencillas (y no tanto) en una sola linea
+    - la llave de inicio de cada funcion en la misma linea donde se define
+    - espacios a derecha e izquierda de cada argumento
+    - dos espacios de indentacion
+
+
+    Regresando al tema, el siguiente cambio ocurre en @c(regexp3)
+
+    ..src > c
+      unsigned int regexp3( char *txt, char *re ){
+        struct RE    rexp;
+        int result   = 0;
+        text.len     = strlen( txt );
+        Catch.ptr[0] = txt;                // ➊
+        Catch.len[0] = text.len;           // ➋
+        Catch.id [0] = 0;                  // ➌
+        Catch.index  = 1;                  // ➍
+        rexp.ptr     = re;
+        rexp.type    = PATH;
+        rexp.len     = strlen( re );
+        rexp.mods    = 0;
+
+        if( text.len == 0 || rexp.len == 0 ) return 0;
+
+        getMods( &rexp, &rexp );
+
+        for( int forward, i = 0, loops = rexp.mods & MOD_ALPHA ? 1 : text.len; i < loops; i += forward ){
+          forward    = 1;
+          Catch.idx  = 1;                  // ➎
+          text.pos   = 0;
+          text.ptr   = txt          + i;
+          text.len   = Catch.len[0] - i;   // ➏
+
+          if( walker( rexp ) ){
+            if     (  rexp.mods & MOD_OMEGA    ){ if( text.pos == text.len ) return TRUE; }
+            else if(  rexp.mods & MOD_LONLEY   )                             return TRUE;
+            else if( (rexp.mods & MOD_FwrByChar) || text.pos == 0 )          result++;
+            else   {  forward = text.pos;                                    result++; }
+          }
+        }
+
+        return result;
+      }
+    < src..
+
+    Con justa razon te preguntaras, ¿que hace este borracho iniciando la primer
+    captura con los datos de la cadena (➊➋)? En efecto, no es necesario,
+    desperdicio la primer posicion (0) para evitar hacer ajustes del estolio
+    estilo @c(index - 1) cada vez que el usuario solicite una captura indexada
+    apartir de 1 y no de 0. Visto de esa forma igual y tiene algun sentido. Oh,
+    a la captura 0 tambien le asigno el identificador 0 ➌, para que el usuario
+    no tenga acceso a esta captura. En consecuencia con lo anterior la primer
+    captura disponible estara en la posicion uno ➍.
+
+    Ya en el ciclo de busqueda, como antes se explico, la posicion de cada
+    captura con respecto a la regexp esta indicada por la variable @c(id). Esta
+    debe reiniciarse en cada ciclo ➎. La colocamos a uno para mentener la
+    consintencia.
+
+    En la vercion anterior, interaccion a iteracion haciamos uso de @c(strlen)
+    para establecer la longitud de la cadena; esto no solo es ineficiente, en
+    cadenas de longitud considerable sera una fuente exagerada de lentitud. Ya
+    que la captura cero almacena la longitud del texto, subtituimos @c(strlen)
+    por el valor de esta ➏.
+
+    La existencia de las capturas acarrea un problema critico. Ahora el motor no
+    solo debe recordar el punto de inicio con respecto a la cadena para cada
+    ruta de ejecucion, tambien ha de recordar el indice de captura y el
+    identificador.
+
+    ..src > c
+      static int walker( struct RE rexp ){
+        struct RE track;
+        for( const int oPos = text.pos, oCindex = Catch.index, oCidx = Catch.idx; // ➊
+             trackByType( &rexp, &track, PATH );
+             text.pos = oPos, Catch.index = oCindex, Catch.idx = oCidx )          // ➋
+          if( trekking( &track ) ) return TRUE;
+
+        return FALSE;
+      }
+    < src..
+
+    easy, agregamos los nuevos puntos de control ➊ y son restablecemos en cada
+    ciclo sin coincidencia ➋.
+
+    Establecer el inicio y el final de la captura es quiza lo mas complicado, el
+    motor debe gestionar el inicio y final de cada captura de forma
+    independiente dentro de toda la recursividad. @c(looper), nuestro punto de
+    gestion recursivo y de avance por la cadena tambien sera resposable de la
+    tarea:
+
+    ..src > c
+      static int looper( struct RE *rexp ){
+        int iCatch, forward, loops = 0;  // ➊
+
+        switch( rexp->type ){
+        case HOOK:                       // ➋
+          openCatch( &iCatch );          // ➌
+          while( loops < rexp->loopsMax && walker( *rexp ) )
+            loops++;
+          if( loops >= rexp->loopsMin ) closeCatch( iCatch ); // ➍
+          break;
+        case GROUP: case PATH:
+          while( loops < rexp->loopsMax && walker( *rexp ) )
+            loops++;
+          break;
+        case SET: case BACKREF: case META: case RANGEAB: case POINT: case SIMPLE:
+          while( loops < rexp->loopsMax && text.pos < text.len && (forward = match( rexp )) ){
+            text.pos += forward;
+            loops++;
+          }
+        }
+
+        return loops < rexp->loopsMin ? FALSE : TRUE;
+      }
+    < src..
+
+    El gestor @"(independiente) de cada captura se llama @c(iCatch) ➊, recuerda
+    que aun en medio de la recursividad cada funcion tiene sus propios
+    parametros, por lo que cada llamada se hara cargo de su propio
+    captura.... piensalo un momento...
+
+    El caso @c(HOOK) ➋, es una copia del codigo en el caso @c(GROUP) al que
+    agregamos la apertura de la captura antes de iniciar el ciclo recursivo
+    ➌. Al finalizar, si cumplimos el ciclo correctamente cerramos la captura ➍.
+
+    Es posible que la simplesa del codigo muestre las soluciones de forma
+    trivial (de no serlo soy un fracaso), detente a asimilar el proceso, pon
+    musica psicotropica e imagina situaciones recursivas, magicas, misticas y
+    misteriosas.
+
+    Aqui estan las funciones auxiliares (@c(open)|@c(close))@c(Catch)
+
+    ..src > c
+      static void openCatch( int *index ){
+        if( Catch.index < MAX_CATCHS ){               // ➊
+          *index = Catch.index++;                     // ➋
+          Catch.ptr[ *index ] = text.ptr + text.pos;  // ➌
+          Catch.id [ *index ] = Catch.idx++;          // ➍
+        } else *index = MAX_CATCHS;                   // ➎
+      }
+
+      static void closeCatch( int index ){
+        if( index < MAX_CATCHS )                      // ➏
+          Catch.len[ index ] = &text.ptr[ text.pos ] - Catch.ptr[ index ]; // ➐
+      }
+    < src..
+
+    En ambas funciones antes de hacer nada, verifican que estemos dentro del
+    limite del arreglo ➊➏. En @c(openCatch) si se ha llegado al ultimo elemento
+    regresamos un valor @"(seguro) ➎, si no hacemos esto, el paramentro
+    @c(index) contrendra un valor basura (llamada en @c(looper)), que
+    perfectamente podria pasar la prueba inicial de @c(closeCatch) probocando
+    resultados escabrosos.
+
+    El resto es optener e incrementar el indice actual ➋, establecer el punto de
+    inicio de la captura en la cadena ➌ y optener e incrementar el identificador
+    actual ➍.
+
+    Cerramos la captura restando la posicion inicial a la posicion actual de la
+    cadena ➐, esto nos da la longitud en bytes.
+
+    Listo, tenemos Capturas funcionales... sin una interfaz de uso.
+
+    Que funciones necesita realizar el usuario con las capturas?
+
+    1. Conocer cuantas capturas existen
+
+       ..src > c
+         int totCatch(){ return Catch.index - 1; }
+       < src..
+
+    2. Recuperar los datos de la captura
+
+       ..src > c
+         char * gpsCatch( int index ){
+           return ( index > 0 && index < Catch.index ) ? Catch.ptr[ index ] : 0;
+         }
+
+         int lenCatch( int index ){
+           return ( index > 0 && index < Catch.index ) ? Catch.len[ index ] : 0;
+         }
+       < src..
+
+       @c(gpsCatch) nos regeresa la posicion de inicio de la captura, o un
+       puntero nulo
+
+       @c(lenCatch) nos informa la longitud de una captura (o, cero?)
+
+    3. Recuperar una captura
+
+       ..src > c
+         char * cpyCatch( char * str, int index ){
+           if( index > 0 && index < Catch.index ){
+             strncpy( str, Catch.ptr[ index ], Catch.len[ index ] );
+             str[ Catch.len[ index ] ] = '\0';
+           } else *str = '\0';
+
+           return str;
+         }
+       < src..
+
+       el usuario nos indica el indice de la captura y nos proporciona la
+       memoria que haga falta para hacer una copia, posiblemente con ayuda de
+       @c(lenCatch). Nosotros amablemente le hacemos una copia que finaliza
+       con el signo de terminacion de cadena, junto con un apuntador, por si
+       desea utilizarlo directamente.
+
+       Si el indice es incorrecto, le enviamos una cadena vacia.
+
+    4. Reemplazar todas las apariciones de una coincidencia
+
+       hey, aqui es donde el identificador @c(id) demuestra utilidad
+
+       ..src > c
+         char * rplCatch( char * newStr, char * rplStr, int id ){
+           char *oNewStr = newStr, *last = Catch.ptr[ 0 ];                // 🅐
+
+           for( int index = 1, rpLen = strlen( rplStr ); index < Catch.index; index++ ) // 🅑
+             if( id == Catch.id[ index ] ){                               // 🅒
+               if( last > Catch.ptr[ index ] ) last = Catch.ptr[ index ]; // 🅓
+
+               strncpy( newStr, last, Catch.ptr[ index ] - last );        // 🅔
+               newStr += Catch.ptr[ index ] - last;                       // 🅕
+               strcpy( newStr, rplStr );                                  // 🅖
+               newStr += rpLen;                                           // 🅗
+               last    = Catch.ptr[index] + Catch.len[index];             // 🅘
+             }
+
+           strcpy( newStr, last );                                        // 🅙
+           return oNewStr;                                                // 🅚
+         }
+       < src..
+
+       Los argumentos son los siguientes: @c(newStr) es un puntero a una cadena
+       de caracteres que almacena el resultado, @c(rplStr) es la cadena que
+       substituira la captura e @c(id) el identificador de las capturas a
+       modificar.
+
+       Es necesario advertir que la cadena @c(newStr) no debe ser la misma que
+       la cadena principal (@c(txt) de @c(regexp3)). Esto se debe a que:
+
+       - esta funcion esta diseñada para trabajar con cadenas distintas,
+       - no deberaimos alterar los datos de entrada bajo ningun motivo,
+       - las demas funciones de manejo de capturas apuntarian a datos erroneos
+       - y desconocemos si la cadena principal es modificable.
+
+       A la explicacion -> Tenemos dos cadenas, la cadena fuente @c(last) y la
+       cadena donde ponemos el resultado de la modificacion @c(newStr) 🅐.
+
+       Lo que hacemos es recorrer todas las capturas, de la primera a la ultima
+       🅑, en busca de coincidencias del @c(id) que nos solicitan 🅒.
+
+       Dentro de la coincidencia, tenemos que hacer una copia de los caracteres
+       entre el final la ultima coincidencia y el inicio de la actual 🅔 (en el
+       primer ciclo, @c(last) apunta al inicio de la cadena). Movemos el puntero
+       de la copia el numero de caracteres que fueron copiados 🅕 y hacemos el
+       @"(reemplazo) 🅖. Finalmente desplazamos la posicion de @"(la ultima
+       coincidencia) al final de la posicion de la captura actual 🅘 y pasamos al
+       siguiente ciclo.
+
+       cuando termina el bucle, copiamos @"(el resto de la cadena) (desde la
+       ultima captura) en la cadena de copia 🅙, je, m-a-g-i-a!
+
+       Al terminar regresamos un puntero a la posicion inicial del resultado 🅚.
+
+       Por cierto, para que es el punto 🅓? pues, si tubieramos activo el
+       modificador @c(MOD_FwrByChar) (@c(~)) podria darse el caso
+       de que la ultima captura, terminara despues del inicio de la actual,
+       si!? y en esa situacion... bueno, descubrelo por tu cuenta.
+
+    5. Poder crear una cadena apartir de las capturas
+
+       ..src > c
+         char * putCatch( char * newStr, char * putStr ){
+           char *oNewStr = newStr;
+
+           while( *putStr )
+             if( *putStr == '#' ){                     // ➊
+               if( *++putStr == '#' )                  // ➋
+                 *newStr++ = *putStr++;
+               else {
+                 int index = atoi( putStr );           // ➌
+                 cpyCatch( newStr, index );            // ➍
+                 newStr += lenCatch( index );          // ➎
+                 putStr += countCharDigits( putStr );  // ➏
+               }
+             } else { *newStr++ = *putStr++; }
+
+           *newStr = '\0';
+
+           return oNewStr;                             // ➐
+         }
+       < src..
+
+       Esta funcion esta basada @c(printf), solo que en lugar de desplegar el
+       resultado, lo almacena en una cadena @%c(newStr) y en lugar de subtituir
+       sus secuencias especiales por valores, lo hara por capturas. Nuestra
+       secuencia especial sera el signo @c(#) seguido por el indice de una
+       captura, por ejemplo:
+
+       ..src > c
+         rplCatch( str, "la primer captura es: #1" );
+       < src..
+
+       Colocara dentro de la cadena @c(str) el texto @c(la primer captura es: )
+       y la secuencia @c(#1) sera substituida por el contenido de la primer
+       captura.
+
+       - Si el indice es incorrecto no colocamos nada y el indicador
+         @"(desaparace).
+
+       - Si en lugar de un indice (numeros) hay una secuencia de caracteres no
+         numerica, en el resultado, desaparace el signo @c(#), pero la secuencia
+         de caracteres seguira precente.
+
+       - Si lo que queremos es colocar un @c(#), ponemos la secuencia @c(##). El
+         primer @c(#) @"(escapa) al segundo @c(#).
+
+       El mecanismo de @c(putCatch) es similar al de @c(rplCatch). En lugar de
+       buscar capturas, buscamos secuencias @c(#) ➊.
+
+       Si la secuencia va seguida de un @c(#) ➋, en la cadena resultado dejamos
+       un @c(#), y vamos por el siguiente caracter. De lo contrario, se optiene
+       el indice de la captura ➌, hacemos la copia de esta ➍ y movemos el
+       puntero de la copia y el de la cadena de formato los caracteres
+       @"(respectivos) ➎➏.
+
+       Al terminar se regresa un puntero al inicio de la cadena ➐ resultado.
+
+
+    Como es costumbre aplicamos un conjunto variado de pruebas.
+
+    ..src > c
+        char str[1024];
+      #define CATCH_TEST( text, re, n, rtext )                \
+        result = regexp3( text, re );                         \
+        total++;                                              \
+        if( strcmp( cpyCatch( str, n ), rtext ) != 0 ){       \
+          printf( "%s:%d Error on " text ", " re "\n",        \
+                  __FILE__, __LINE__ );                       \
+          printf( "result    >>%s<<\n"                        \
+                  "expected  >>%s<<\n", str, rtext );         \
+          errs++;                                             \
+        }
+
+        CATCH_TEST( "a", "<a>", 1, "a" );
+        CATCH_TEST( "aa", "<aa>", 1, "aa" );
+        CATCH_TEST( "a a a", "<a>", 3, "a" );
+        CATCH_TEST( "abcd", "<a|b|c|d>", 1, "a" );
+        CATCH_TEST( "abcd", "<a|b|c|d>", 2, "b" );
+        CATCH_TEST( "abcd", "<a|b|c|d>", 3, "c" );
+        CATCH_TEST( "abcd", "<a|b|c|d>", 4, "d" );
+        CATCH_TEST( "abcd", "<a|b|c|d>", 5, "" );
+        CATCH_TEST( "abc", "a<x>", 1, "" );
+        CATCH_TEST( "abc", "<a>x", 1, "" );
+        CATCH_TEST( "abc", "<a|b>x", 1, "" );
+        CATCH_TEST( "abc", "<<a|b>x|abc>", 1, "abc" );
+        CATCH_TEST( "abc", "<<a|b>x|abc>", 2, "" );
+        CATCH_TEST( "abc", "<x<a|b>|abc>", 1, "abc" );
+        CATCH_TEST( "abc", "<x<a|b>|abc>", 2, "" );
+        CATCH_TEST( "abc abc abc", "<a|b|c>", 9, "c" );
+        CATCH_TEST( "abc abc abc", "<(a|b|c)(a|b|c)(a|b|c)>", 3, "abc" );
+        CATCH_TEST( "abc abc abc", "<(a|b|c)(a|b|c)(a|b|c)> ", 2, "abc" );
+        CATCH_TEST( "abc abc abc", "#?<(a|b|c)(a|b|c)(a|b|c)>", 1, "abc" );
+        CATCH_TEST( "abc abc abc", "#?<(a|b|c)(a|b|c)((a|b)|x)>", 1, "" );
+        CATCH_TEST( "abc abc abx", "#?<(a|b|c)(a|b|c)((a|b)|x)>", 1, "abx" );
+        CATCH_TEST( "abc iecc oeb", "<<(a|e)|(i|o)>e<b|c>|abc>", 1, "abc" );
+        CATCH_TEST( "abc iecc oeb", "<<(a|e)|(i|o)>e<b|c>|abc>", 2, "iec" );
+        CATCH_TEST( "abc iecc oeb", "<<(a|e)|(i|o)>e<b|c>|abc>", 3, "i" );
+        CATCH_TEST( "abc iecc oeb", "<<(a|e)|(i|o)>e<b|c>|abc>", 4, "c" );
+        CATCH_TEST( "abc iecc oeb", "<<(a|e)|(i|o)>e<b|c>|abc>", 5, "oeb" );
+        CATCH_TEST( "abc iecc oeb", "<<(a|e)|(i|o)>e<b|c>|abc>", 6, "o" );
+        CATCH_TEST( "abc iecc oeb", "<<(a|e)|(i|o)>e<b|c>|abc>", 7, "b" );
+        CATCH_TEST( "abc iecc oeb", "<<(a|e)|(i|o)>e<b|c>|abc>", 8, "" );
+
+        CATCH_TEST( "a", "<a>?", 1, "a" );
+        CATCH_TEST( "a", "<b>?", 1, "" );
+        CATCH_TEST( "a", "<a>+", 1, "a" );
+        CATCH_TEST( "a", "<a>*", 1, "a" );
+        CATCH_TEST( "a", "<b>*", 1, "" );
+        CATCH_TEST( "aaa", "<a>+", 1, "aaa" );
+        CATCH_TEST( "aaa", "<a>*", 1, "aaa" );
+        CATCH_TEST( "aaa", "#~<a>+", 1, "aaa" );
+        CATCH_TEST( "aaa", "#~<a>*", 1, "aaa" );
+        CATCH_TEST( "aaab", "#~<a+>", 1, "aaa" );
+        CATCH_TEST( "aaab", "#~<a*>", 1, "aaa" );
+        CATCH_TEST( "aaab", "#~<a?>", 4, "" );
+        CATCH_TEST( "aaab", "#~<a+b>", 1, "aaab" );
+        CATCH_TEST( "aaab", "#~<a*b>", 1, "aaab" );
+        CATCH_TEST( "aaab", "#~<a?b>", 1, "ab" );
+        CATCH_TEST( "aaab", "#~<a+b?>", 1, "aaab" );
+        CATCH_TEST( "aaab", "#~<a*b?>", 1, "aaab" );
+        CATCH_TEST( "aaab", "#~<a?b?>", 3, "ab" );
+        CATCH_TEST( "aaab", "#~<a+b+>", 1, "aaab" );
+        CATCH_TEST( "aaab", "#~<a*b+>", 1, "aaab" );
+        CATCH_TEST( "aaab", "#~<a?b+>", 1, "ab" );
+        CATCH_TEST( "aaab", "#~<a+b*>", 1, "aaab" );
+        CATCH_TEST( "aaab", "#~<a*b*>", 1, "aaab" );
+        CATCH_TEST( "aaab", "#~<a?b*>", 3, "ab" );
+        CATCH_TEST( "aaabaaa", "#~<a+>", 4, "aaa" );
+        CATCH_TEST( "aaabaaa", "#~<a*>", 5, "aaa" );
+
+        CATCH_TEST( "Raptor Test",     "<((C|R)ap C|C|R)(a+p{1}tor) ?((<T|F>+e)(st))>", 1, "Raptor Test" );
+        CATCH_TEST( "Raptor Test",     "<((C|R)ap C|C|R)(a+p{1}tor) ?((<T|F>+e)(st))>", 2, "T" );
+        CATCH_TEST( "Raaaaptor TFest", "<((C|R)ap C|C|R)(a+p{1}tor) ?((<T|F>+e)(st))>", 1, "Raaaaptor TFest" );
+        CATCH_TEST( "Raaaaptor TFest", "<((C|R)ap C|C|R)(a+p{1}tor) ?((<T|F>+e)(st))>", 2, "TF" );
+        CATCH_TEST( "CaptorTest",      "<((C|R)ap C|C|R)(a+p{1}tor) ?((<T|F>+e)(st))>", 1, "CaptorTest" );
+        CATCH_TEST( "Cap CaptorTest",  "<((C|R)ap C|C|R)(a+p{1}tor) ?((<T|F>+e)(st))>", 1, "Cap CaptorTest" );
+        CATCH_TEST( "Cap CaptorTest",  "#~<((C|R)ap C|C|R)(a+p{1}tor) ?((<T|F>+e)(st))>", 3, "CaptorTest" );
+        CATCH_TEST( "Rap Captor Fest", "<((C|R)ap C|C|R)(a+p{1}tor) ?((<T|F>+e)(st))>", 1, "Rap Captor Fest" );
+        CATCH_TEST( "Rap Captor Fest", "#~<((C|R)ap C|C|R)(a+p{1}tor) ?((<T|F>+e)(st))>", 3, "Captor Fest" );
+
+      #define REPLACE_TEST( text, re, n, rtext, ctext )               \
+        result = regexp3( text, re );                                 \
+        total++;                                                      \
+        if( strcmp( rplCatch( str, rtext, n ), ctext ) != 0 ){        \
+          printf( "%s:%d Error on " text ", " re "\n",                \
+                  __FILE__, __LINE__ );                               \
+          printf( "result    >>%s<<\n"                                \
+                  "expected  >>%s<<\n", str, ctext );                 \
+          errs++;                                                     \
+        }
+
+        REPLACE_TEST( "a", "<a>"   , 1, "", "" );
+        REPLACE_TEST( "a", "<a>?"  , 1, "", "" );
+        REPLACE_TEST( "a", "<a>+"  , 1, "", "" );
+        REPLACE_TEST( "a", "<a>*"  , 1, "", "" );
+        REPLACE_TEST( "a", "<a>{1}", 1, "", "" );
+        REPLACE_TEST( "a", "<a?>"  , 1, "", "" );
+        REPLACE_TEST( "a", "<a+>"  , 1, "", "" );
+        REPLACE_TEST( "a", "<a*>"  , 1, "", "" );
+        REPLACE_TEST( "a", "<a{1}>", 1, "", "" );
+
+        REPLACE_TEST( "a", "<a>"   , 1, "e", "e" );
+        REPLACE_TEST( "a", "<a>?"  , 1, "e", "e" );
+        REPLACE_TEST( "a", "<a>+"  , 1, "e", "e" );
+        REPLACE_TEST( "a", "<a>*"  , 1, "e", "e" );
+        REPLACE_TEST( "a", "<a>{1}", 1, "e", "e" );
+        REPLACE_TEST( "a", "<a?>"  , 1, "e", "e" );
+        REPLACE_TEST( "a", "<a+>"  , 1, "e", "e" );
+        REPLACE_TEST( "a", "<a*>"  , 1, "e", "e" );
+        REPLACE_TEST( "a", "<a{1}>", 1, "e", "e" );
+
+        REPLACE_TEST( "a", "<x>"   , 1, "z", "a" );
+        REPLACE_TEST( "a", "<x>?"  , 1, "z", "za" );
+        REPLACE_TEST( "a", "<x>+"  , 1, "z", "a" );
+        REPLACE_TEST( "a", "<x>*"  , 1, "z", "za" );
+        REPLACE_TEST( "a", "<x>{1}", 1, "z", "a" );
+        REPLACE_TEST( "a", "<x?>"  , 1, "z", "za" );
+        REPLACE_TEST( "a", "<x+>"  , 1, "z", "a" );
+        REPLACE_TEST( "a", "<x*>"  , 1, "z", "za" );
+        REPLACE_TEST( "a", "<x{1}>", 1, "z", "a" );
+
+        REPLACE_TEST( "aaa", "<a>"   , 1, "", "" );
+        REPLACE_TEST( "aaa", "<a>?"  , 1, "", "" );
+        REPLACE_TEST( "aaa", "<a>+"  , 1, "", "" );
+        REPLACE_TEST( "aaa", "<a>*"  , 1, "", "" );
+        REPLACE_TEST( "aaa", "<a>{1}", 1, "", "" );
+        REPLACE_TEST( "aaa", "<a?>"  , 1, "", "" );
+        REPLACE_TEST( "aaa", "<a+>"  , 1, "", "" );
+        REPLACE_TEST( "aaa", "<a*>"  , 1, "", "" );
+        REPLACE_TEST( "aaa", "<a{1}>", 1, "", "" );
+
+        REPLACE_TEST( "aaa", "<a>"   , 1, "e", "eee" );
+        REPLACE_TEST( "aaa", "<a>?"  , 1, "e", "eee" );
+        REPLACE_TEST( "aaa", "<a>+"  , 1, "e", "e" );
+        REPLACE_TEST( "aaa", "<a>*"  , 1, "e", "e" );
+        REPLACE_TEST( "aaa", "<a>{1}", 1, "e", "eee" );
+        REPLACE_TEST( "aaa", "<a?>"  , 1, "e", "eee" );
+        REPLACE_TEST( "aaa", "<a+>"  , 1, "e", "e" );
+        REPLACE_TEST( "aaa", "<a*>"  , 1, "e", "e" );
+        REPLACE_TEST( "aaa", "<a{1}>", 1, "e", "eee" );
+
+        REPLACE_TEST( "aaa", "<x>"   , 1, "z", "aaa" );
+        REPLACE_TEST( "aaa", "<x>?"  , 1, "z", "zazaza" );
+        REPLACE_TEST( "aaa", "<x>+"  , 1, "z", "aaa" );
+        REPLACE_TEST( "aaa", "<x>*"  , 1, "z", "zazaza" );
+        REPLACE_TEST( "aaa", "<x>{1}", 1, "z", "aaa" );
+        REPLACE_TEST( "aaa", "<x?>"  , 1, "z", "zazaza" );
+        REPLACE_TEST( "aaa", "<x+>"  , 1, "z", "aaa" );
+        REPLACE_TEST( "aaa", "<x*>"  , 1, "z", "zazaza" );
+        REPLACE_TEST( "aaa", "<x{1}>", 1, "z", "aaa" );
+
+        REPLACE_TEST( "aaab", "<a>"   , 1, "e", "eeeb" );
+        REPLACE_TEST( "aaab", "<a>?"  , 1, "e", "eeeeb" );
+        REPLACE_TEST( "aaab", "<a>+"  , 1, "e", "eb" );
+        REPLACE_TEST( "aaab", "<a>*"  , 1, "e", "eeb" );
+        REPLACE_TEST( "aaab", "<a>{1}", 1, "e", "eeeb" );
+        REPLACE_TEST( "aaab", "<a?>"  , 1, "e", "eeeeb" );
+        REPLACE_TEST( "aaab", "<a+>"  , 1, "e", "eb" );
+        REPLACE_TEST( "aaab", "<a*>"  , 1, "e", "eeb" );
+        REPLACE_TEST( "aaab", "<a{1}>", 1, "e", "eeeb" );
+
+        REPLACE_TEST( "aaab", "<x>"   , 1, "z", "aaab" );
+        REPLACE_TEST( "aaab", "<x>?"  , 1, "z", "zazazazb" );
+        REPLACE_TEST( "aaab", "<x>+"  , 1, "z", "aaab" );
+        REPLACE_TEST( "aaab", "<x>*"  , 1, "z", "zazazazb" );
+        REPLACE_TEST( "aaab", "<x>{1}", 1, "z", "aaab" );
+        REPLACE_TEST( "aaab", "<x?>"  , 1, "z", "zazazazb" );
+        REPLACE_TEST( "aaab", "<x+>"  , 1, "z", "aaab" );
+        REPLACE_TEST( "aaab", "<x*>"  , 1, "z", "zazazazb" );
+        REPLACE_TEST( "aaab", "<x{1}>", 1, "z", "aaab" );
+
+        REPLACE_TEST( "aaabaaa", "<a>"   , 1, "e", "eeebeee" );
+        REPLACE_TEST( "aaabaaa", "<a>?"  , 1, "e", "eeeebeee" );
+        REPLACE_TEST( "aaabaaa", "<a>+"  , 1, "e", "ebe" );
+        REPLACE_TEST( "aaabaaa", "<a>*"  , 1, "e", "eebe" );
+        REPLACE_TEST( "aaabaaa", "<a>{1}", 1, "e", "eeebeee" );
+        REPLACE_TEST( "aaabaaa", "<a?>"  , 1, "e", "eeeebeee" );
+        REPLACE_TEST( "aaabaaa", "<a+>"  , 1, "e", "ebe" );
+        REPLACE_TEST( "aaabaaa", "<a*>"  , 1, "e", "eebe" );
+        REPLACE_TEST( "aaabaaa", "<a{1}>", 1, "e", "eeebeee" );
+
+        REPLACE_TEST( "aaabaaa", "<x>"   , 1, "z", "aaabaaa" );
+        REPLACE_TEST( "aaabaaa", "<x>?"  , 1, "z", "zazazazbzazaza" );
+        REPLACE_TEST( "aaabaaa", "<x>+"  , 1, "z", "aaabaaa" );
+        REPLACE_TEST( "aaabaaa", "<x>*"  , 1, "z", "zazazazbzazaza" );
+        REPLACE_TEST( "aaabaaa", "<x>{1}", 1, "z", "aaabaaa" );
+        REPLACE_TEST( "aaabaaa", "<x?>"  , 1, "z", "zazazazbzazaza" );
+        REPLACE_TEST( "aaabaaa", "<x+>"  , 1, "z", "aaabaaa" );
+        REPLACE_TEST( "aaabaaa", "<x*>"  , 1, "z", "zazazazbzazaza" );
+        REPLACE_TEST( "aaabaaa", "<x{1}>", 1, "z", "aaabaaa" );
+
+        REPLACE_TEST( "aaabaaa aaabaaa", "<a><b>"   , 1, "e", "aaebaaa aaebaaa" );
+        REPLACE_TEST( "aaabaaa aaabaaa", "<a>?<b>"  , 1, "e", "aaebaaa aaebaaa" );
+        REPLACE_TEST( "aaabaaa aaabaaa", "<a>+<b>"  , 1, "e", "ebaaa ebaaa" );
+        REPLACE_TEST( "aaabaaa aaabaaa", "<a>*<b>"  , 1, "e", "ebaaa ebaaa" );
+        REPLACE_TEST( "aaabaaa aaabaaa", "<a>{1}<b>", 1, "e", "aaebaaa aaebaaa" );
+        REPLACE_TEST( "aaabaaa aaabaaa", "<a?><b>"  , 1, "e", "aaebaaa aaebaaa" );
+        REPLACE_TEST( "aaabaaa aaabaaa", "<a+><b>"  , 1, "e", "ebaaa ebaaa" );
+        REPLACE_TEST( "aaabaaa aaabaaa", "<a*><b>"  , 1, "e", "ebaaa ebaaa" );
+        REPLACE_TEST( "aaabaaa aaabaaa", "<a{1}><b>", 1, "e", "aaebaaa aaebaaa" );
+
+        REPLACE_TEST( "Raptor Test", "<Raptor>", 1, "Captor", "Captor Test"   );
+        REPLACE_TEST( "Raptor Test", "<Raptor>", 0, "Captor", "Raptor Test"   );
+        REPLACE_TEST( "Raptor Test", "<Raptor|Test>", 0, "Captor", "Raptor Test"   );
+        REPLACE_TEST( "Raptor Test", "<Raptor|Test>", 1, "Captor", "Captor Captor"   );
+        REPLACE_TEST( "Raptor Test", "<Raptor|Test>", 2, "Captor", "Raptor Test"   );
+        REPLACE_TEST( "Raptor Test", "<Raptor|<Test>>", 2, "Fest", "Raptor Fest"   );
+        REPLACE_TEST( "Raptor Raptors Raptoring", "<Raptor:w*>", 1, "Test", "Test Test Test" );
+        REPLACE_TEST( "Raptor Raptors Raptoring", "<Raptor>:w*", 1, "Test", "Test Tests Testing" );
+        REPLACE_TEST( "Raptor Raptors Raptoring", "<<<R>a>ptor>:w*", 3, "C", "Captor Captors Captoring" );
+        REPLACE_TEST( "Raptor Raptors Raptoring", "<<<R>a>ptor>:w*", 2, "4", "4ptor 4ptors 4ptoring" );
+
+      #define PUT_TEST( text, re, rtext, ctext )              \
+        result = regexp3( text, re );                         \
+        total++;                                              \
+        if( strcmp( putCatch( str, rtext ), ctext ) != 0 ){   \
+          printf( "%s:%d Error on " text ", " re "\n",        \
+                  __FILE__, __LINE__ );                       \
+          printf( "result    >>%s<<\n"                        \
+                  "expected  >>%s<<\n", str, ctext );         \
+          errs++;                                             \
+        }
+
+        PUT_TEST( "a", "<a>", "#1", "a" );
+        PUT_TEST( "a", "<a>", "#x", "x" );
+        PUT_TEST( "a", "<a>", "#xx", "xx" );
+        PUT_TEST( "a", "<a>", "###1##", "#a#" );
+        PUT_TEST( "a", "<a>", "[#0][#1][#2#3#1000000]", "[][a][]" );
+        PUT_TEST( "aa", "<aa>", "#1", "aa" );
+        PUT_TEST( "a a a", "<a>", "#1#2#3", "aaa" );
+        PUT_TEST( "abcd", "<a|b|c|d>", "#4 #3 #2 #1", "d c b a" );
+        PUT_TEST( "1 2 3 4 5 6 7 8 9", "<1|2|3|4|5|6|7|8|9>", "#5 #6 #7 #8 #9 #1 #2 #3 #4", "5 6 7 8 9 1 2 3 4" );
+        PUT_TEST( "Raptor Test", "<aptor|est>", "C#1 F#2", "Captor Fest" );
+        PUT_TEST( "Raptor Test", "<aptor|est>", "C#5 F#2", "C Fest" );
+        PUT_TEST( "Raptor Test", "<aptor|est>", "C#a F#2", "Ca Fest" );
+        PUT_TEST( "Raptor Test", "<aptor|est>", "C#0 F#2", "C Fest" );
+        PUT_TEST( "Raptor Test", "<aptor|est>", "C#43 F#43", "C F" );
+        PUT_TEST( "Raptor Test", "<aptor|est>", "C##43 ##F#43##", "C#43 #F#" );
+        PUT_TEST( "Raptor Test", "<aptor|est>", "C##43 ##1##2", "C#43 #1#2" );
+        PUT_TEST( "Raptor Test", "<aptor|est>", "##Raptor ##Test", "#Raptor #Test" );
+        PUT_TEST( "Raptor Test Fest", "<Raptor> <Test>", "#1_#2", "Raptor_Test" );
+    < src..
+
 *** backreferences
 *** Stand Alone Complex
 * Regexp3 (UTF-8)
